@@ -3,14 +3,25 @@
 Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
 względem wschodu i zachodu słońca.
 
-![wersja](https://img.shields.io/badge/wersja-1.3.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja-1.4.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 
 ## Co robi
 
-**Animowana pozycja słońca.** Liczona z encji `sun.sun` (`elevation`,
-`next_rising`, `next_setting`). Niebo zmienia barwę od dnia, przez zmierzch,
-po noc z gwiazdami; nocą słońce wędruje pod linią horyzontu.
+**Animowana pozycja słońca i księżyca.** Liczona z encji `sun.sun`
+(`elevation`, `next_rising`, `next_setting`). Niebo zmienia barwę od dnia,
+przez zmierzch, po noc z gwiazdami.
+
+Po wejściu na kartę ciało niebieskie **wjeżdża od wschodu do swojej bieżącej
+pozycji** w ciągu około dwóch i pół sekundy, z wyhamowaniem na końcu. Za dnia
+robi to słońce, nocą — księżyc, który wędruje pod linią horyzontu.
+
+Księżyc pokazuje **rzeczywistą fazę**. Liczona jest z miesiąca synodycznego,
+bez żadnej dodatkowej encji, więc działa też bez integracji `moon`. Terminator
+to półelipsa o poziomej półosi `r·|cos 2πf|`: przy nowiu równa promieniowi,
+przy kwadrze zerowa, przy pełni znów równa promieniowi, ale z drugiej strony.
+Sierp przybywający jest oświetlony po prawej, ubywający po lewej — zgodnie
+z widokiem z półkuli północnej. Nazwa fazy trafia do podtytułu karty.
 
 **Plan ogrodu z punktami świetlnymi.** Kliknięcie punktu przełącza przypisaną
 encję, a świecąca lampa dostaje żółtą poświatę. Wieczorem zdjęcie przygasa
@@ -31,6 +42,8 @@ Edytor karty prowadzi przez trzy kroki i sam pokazuje, czego jeszcze brakuje:
 2. **Lampy** — rozmieszczasz je klikając w zdjęcie.
 3. **Sterowanie słońcem** — przycisk *Utwórz helpery* zakłada oba `input_number`
    z właściwym zakresem i jednostką, po czym wpisuje je do konfiguracji karty.
+4. **Automatyzacja** — wskazujesz automatyzację karty, dzięki czemu wykrywanie
+   konfliktów wie, czego nie ruszać i co włączyć.
 
 Sekcja *Ustawienia zaawansowane* pozwala podmienić encję słońca albo wskazać
 własne helpery, jeśli już je masz.
@@ -94,6 +107,7 @@ points:
 | `offset_zachod_entity` | — | `input_number` z przesunięciem włączenia |
 | `offset_wschod_entity` | — | `input_number` z przesunięciem wyłączenia |
 | `dim_max` | `0.5` | maksymalne nocne przyciemnienie tła, `0` = brak, `1` = czerń |
+| `automation_entity` | — | automatyzacja karty; włączana przy rozwiązywaniu konfliktu |
 | `points` | `[]` | lista punktów świetlnych z przypisanymi encjami |
 
 Punkt przyjmuje encje z domen `light` i `switch`; kliknięcie wywołuje
@@ -126,6 +140,19 @@ input_number:
 
 Wartość **ujemna oznacza przed** zdarzeniem, **dodatnia po** zdarzeniu.
 Przykładowo `-15` przy zachodzie to „włącz kwadrans przed zachodem".
+
+## Wykrywanie konfliktów
+
+Karta sprawdza, czy tymi samymi lampami nie steruje już coś innego. Automatyzacje
+znajduje przez wyszukiwarkę powiązań Home Assistanta (`search/related`),
+a harmonogramy — na przykład dodatek Scheduler — po atrybucie `entities`.
+Pod uwagę bierze tylko te aktywne, a własną automatyzację karty pomija.
+
+Gdy coś znajdzie, pokazuje pasek ostrzeżenia z nazwami kolidujących wpisów
+i przyciskiem, który **wyłącza je wszystkie i włącza automatyzację wskazaną
+w konfiguracji karty**. Ostrzeżenie można też zignorować.
+
+Własną automatyzację wskazuje się w kroku 4 edytora (`automation_entity`).
 
 ## Automatyzacja
 

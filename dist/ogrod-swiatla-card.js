@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '1.3.0';
+const OSC_WERSJA = '1.4.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -47,6 +47,43 @@ const OSC_P0 = { x: 28, y: 118 };
 const OSC_P1 = { x: 200, y: -26 };
 const OSC_P2 = { x: 372, y: 118 };
 
+/* Pozycja ciala niebieskiego dla zadanego postepu doby (0..1).
+   Za dnia po luku nad horyzontem, noca po plytkim luku pod nim. */
+const oscPozycjaCiala = (dzien, t) => (dzien
+  ? oscBezier(t, OSC_P0, OSC_P1, OSC_P2)
+  : { x: 372 - t * 344, y: 118 + Math.sin(Math.PI * t) * 26 });
+
+/* Faza ksiezyca liczona z miesiaca synodycznego, bez zadnej encji.
+   Punkt odniesienia: now 6 stycznia 2000, 18:14 UTC. */
+const OSC_NOW_ODN = Date.UTC(2000, 0, 6, 18, 14);
+const OSC_MIESIAC = 29.530588853 * 86400000;
+const oscFazaKsiezyca = (ts) => {
+  const d = (((ts - OSC_NOW_ODN) % OSC_MIESIAC) + OSC_MIESIAC) % OSC_MIESIAC;
+  return d / OSC_MIESIAC;              // 0 = now, 0.5 = pelnia
+};
+
+const OSC_NAZWY_FAZ = ['now', 'sierp przybywajacy', 'pierwsza kwadra',
+  'wypukly przybywajacy', 'pelnia', 'wypukly ubywajacy', 'ostatnia kwadra',
+  'sierp ubywajacy'];
+const oscNazwaFazy = (f) => OSC_NAZWY_FAZ[Math.floor(((f + 1 / 16) % 1) * 8) % 8];
+
+/*
+ * Kontur oswietlonej czesci tarczy. Terminator to polowa elipsy o polosi
+ * poziomej r*|cos(2*pi*f)|: przy nowiu rowna promieniowi (nic nie widac),
+ * przy kwadrze zero (prosta), przy pelni znowu promieniowi, ale z drugiej
+ * strony. Strona oswietlona zalezy od tego, czy ksiezyca przybywa.
+ */
+const oscSciezkaKsiezyca = (cx, cy, r, f) => {
+  const rosnie = f < 0.5;
+  const kos = Math.cos(2 * Math.PI * f);
+  const rx = Math.abs(kos) * r;
+  const zewn = rosnie ? 1 : 0;
+  const term = rosnie ? (kos > 0 ? 0 : 1) : (kos > 0 ? 1 : 0);
+  return 'M ' + cx + ' ' + (cy - r) +
+         ' A ' + r + ' ' + r + ' 0 0 ' + zewn + ' ' + cx + ' ' + (cy + r) +
+         ' A ' + rx.toFixed(2) + ' ' + r + ' 0 0 ' + term + ' ' + cx + ' ' + (cy - r) + ' Z';
+};
+
 /*
  * Stan slonca na podstawie encji sun.sun. Zwraca doby sloneczna, do ktorej
  * nalezy biezaca chwila, postep 0..1 oraz wspolrzedne do rysowania.
@@ -62,15 +99,10 @@ function oscStanSlonca(st) {
   const wschod = dzien ? nr - 86400000 : nr;
   const zachod = dzien ? ns : ns - 86400000;
 
-  let poz;
-  let postep;
-  if (dzien) {
-    postep = oscZacisk((teraz - wschod) / (zachod - wschod), 0, 1);
-    poz = oscBezier(postep, OSC_P0, OSC_P1, OSC_P2);
-  } else {
-    postep = oscZacisk((teraz - zachod) / (nr - zachod), 0, 1);
-    poz = { x: 372 - postep * 344, y: 118 + Math.sin(Math.PI * postep) * 26 };
-  }
+  const postep = dzien
+    ? oscZacisk((teraz - wschod) / (zachod - wschod), 0, 1)
+    : oscZacisk((teraz - zachod) / (nr - zachod), 0, 1);
+  const poz = oscPozycjaCiala(dzien, postep);
 
   return {
     dzien,
@@ -102,6 +134,7 @@ class OgrodSwiatlaCard extends HTMLElement {
       offset_zachod_entity: 'input_number.ogrod_offset_zachod',
       offset_wschod_entity: 'input_number.ogrod_offset_wschod',
       dim_max: 0.5,
+      automation_entity: '',
       points: [],
     };
   }
@@ -114,6 +147,7 @@ class OgrodSwiatlaCard extends HTMLElement {
       offset_zachod_entity: 'input_number.ogrod_offset_zachod',
       offset_wschod_entity: 'input_number.ogrod_offset_wschod',
       dim_max: 0.5,
+      automation_entity: '',
       points: [],
       ...config,
     };
@@ -135,11 +169,14 @@ class OgrodSwiatlaCard extends HTMLElement {
   }
 
   connectedCallback() {
+    /* Przy kazdym wejsciu na karte ciało niebieskie wjezdza od wschodu. */
+    this._wjechalo = false;
     if (!this._tyk) this._tyk = setInterval(() => this._odswiezSlonce(), 30000);
   }
 
   disconnectedCallback() {
     if (this._tyk) { clearInterval(this._tyk); this._tyk = null; }
+    if (this._klatka) { cancelAnimationFrame(this._klatka); this._klatka = null; }
   }
 
   _zbuduj() {
@@ -153,6 +190,19 @@ class OgrodSwiatlaCard extends HTMLElement {
         }
         .tytul { font-size: 1.25rem; font-weight: 500; }
         .podtytul { font-size: .8rem; color: var(--secondary-text-color); }
+        .konflikt {
+          margin: 0 16px 8px; padding: 10px 12px; border-radius: 10px;
+          background: rgba(255,152,0,.14); border: 1px solid rgba(255,152,0,.45);
+          font-size: .82rem; line-height: 1.4; display: grid; gap: 8px;
+        }
+        .konflikt-akcje { display: flex; gap: 8px; flex-wrap: wrap; }
+        .konflikt button {
+          border: none; border-radius: 8px; padding: 7px 12px; cursor: pointer;
+          font-size: .8rem;
+        }
+        .konflikt-rozwiaz { background: var(--primary-color); color: #fff; }
+        .konflikt-ignoruj { background: var(--secondary-background-color);
+                            color: var(--primary-text-color); }
         .niebo { padding: 0 8px; }
         svg { display: block; width: 100%; height: auto; }
         .info {
@@ -214,6 +264,13 @@ class OgrodSwiatlaCard extends HTMLElement {
           <span class="tytul"></span>
           <span class="podtytul"></span>
         </div>
+        <div class="konflikt" hidden>
+          <span class="konflikt-tresc"></span>
+          <span class="konflikt-akcje">
+            <button class="konflikt-rozwiaz">Wylacz kolidujace</button>
+            <button class="konflikt-ignoruj">Ignoruj</button>
+          </span>
+        </div>
         <div class="niebo">
           <svg viewBox="0 0 400 150" preserveAspectRatio="xMidYMid meet">
             <defs>
@@ -226,6 +283,10 @@ class OgrodSwiatlaCard extends HTMLElement {
                 <stop offset="55%" stop-color="#ffd24a"/>
                 <stop offset="100%" stop-color="#ffb300" stop-opacity="0"/>
               </radialGradient>
+              <radialGradient id="grad-ksiezyc">
+                <stop offset="0%" stop-color="#dfe7fb" stop-opacity=".55"/>
+                <stop offset="100%" stop-color="#aab8e0" stop-opacity="0"/>
+              </radialGradient>
             </defs>
             <rect x="0" y="0" width="400" height="118" fill="url(#grad-niebo)"/>
             <g class="gwiazdy" opacity="0"></g>
@@ -234,6 +295,11 @@ class OgrodSwiatlaCard extends HTMLElement {
                   stroke-dasharray="3 5"/>
             <circle class="poswiata" r="26" fill="url(#grad-slonce)"/>
             <circle class="cialo" r="9"/>
+            <g class="ksiezyc" opacity="0">
+              <circle class="ks-poswiata" r="20" fill="url(#grad-ksiezyc)"/>
+              <circle class="ks-tarcza" r="9" fill="#2a3250"/>
+              <path class="ks-swiatlo" fill="#eef2fb"/>
+            </g>
             <rect x="0" y="118" width="400" height="32" fill="#16351f"/>
             <path d="M0 118 L400 118" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
             <text class="t-wschod" x="28" y="136" font-size="10"
@@ -263,6 +329,12 @@ class OgrodSwiatlaCard extends HTMLElement {
       gwiazdy: this.shadowRoot.querySelector('.gwiazdy'),
       poswiata: this.shadowRoot.querySelector('.poswiata'),
       cialo: this.shadowRoot.querySelector('.cialo'),
+      ksiezyc: this.shadowRoot.querySelector('.ksiezyc'),
+      ksPoswiata: this.shadowRoot.querySelector('.ks-poswiata'),
+      ksTarcza: this.shadowRoot.querySelector('.ks-tarcza'),
+      ksSwiatlo: this.shadowRoot.querySelector('.ks-swiatlo'),
+      konflikt: this.shadowRoot.querySelector('.konflikt'),
+      konfliktTresc: this.shadowRoot.querySelector('.konflikt-tresc'),
       tWschod: this.shadowRoot.querySelector('.t-wschod'),
       tZachod: this.shadowRoot.querySelector('.t-zachod'),
       tElew: this.shadowRoot.querySelector('.t-elew'),
@@ -282,6 +354,14 @@ class OgrodSwiatlaCard extends HTMLElement {
     this._el.gwiazdy.innerHTML = losowe
       .map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i % 3 === 0 ? 1.4 : 0.9}" fill="#fff" opacity="${0.5 + (i % 4) * 0.12}"/>`)
       .join('');
+
+    this.shadowRoot.querySelector('.konflikt-ignoruj')
+      .addEventListener('click', () => {
+        this._konfliktUkryty = true;
+        this._el.konflikt.hidden = true;
+      });
+    this.shadowRoot.querySelector('.konflikt-rozwiaz')
+      .addEventListener('click', () => this._rozwiazKonflikt());
 
     this._zbudujOffsety();
     this._zbudowana = true;
@@ -372,6 +452,93 @@ class OgrodSwiatlaCard extends HTMLElement {
     this._odswiezSlonce();
     this._odswiezOffsety();
     this._odswiezStanyPunktow();
+    this._sprawdzKonflikty();
+  }
+
+  /*
+   * Szuka innych automatyzacji i harmonogramow sterujacych tymi samymi lampami.
+   * Automatyzacje znajdujemy przez wyszukiwarke powiazan Home Assistanta,
+   * a harmonogramy (np. dodatek Scheduler) po atrybucie entities.
+   * Wlasna automatyzacja karty jest z listy wykluczona.
+   */
+  async _sprawdzKonflikty() {
+    if (this._konfliktUkryty || !this._hass) return;
+    const encje = [...new Set((this._config.points || [])
+      .map((p) => p.entity).filter(Boolean))];
+    const klucz = JSON.stringify([encje, this._config.automation_entity]);
+    if (klucz === this._konfliktKlucz && this._konfliktyTrwa !== true) {
+      this._pokazKonflikt();
+      return;
+    }
+    if (this._konfliktyTrwa) return;
+    this._konfliktyTrwa = true;
+    this._konfliktKlucz = klucz;
+
+    const znalezione = new Set();
+    try {
+      if (typeof this._hass.callWS === 'function') {
+        for (const enc of encje) {
+          try {
+            const r = await this._hass.callWS({
+              type: 'search/related', item_type: 'entity', item_id: enc,
+            });
+            (r && r.automation ? r.automation : []).forEach((a) => znalezione.add(a));
+          } catch (_) { /* brak uprawnien albo encja bez powiazan */ }
+        }
+      }
+      Object.keys(this._hass.states).forEach((k) => {
+        if (!k.startsWith('switch.')) return;
+        const lista = this._hass.states[k].attributes.entities;
+        if (Array.isArray(lista) && lista.some((x) => encje.includes(x))) znalezione.add(k);
+      });
+    } finally {
+      this._konfliktyTrwa = false;
+    }
+
+    znalezione.delete(this._config.automation_entity);
+    this._konflikty = [...znalezione].filter((k) => {
+      const st = this._hass.states[k];
+      return st && st.state === 'on';
+    });
+    this._pokazKonflikt();
+  }
+
+  _pokazKonflikt() {
+    const lista = this._konflikty || [];
+    if (this._konfliktUkryty || lista.length === 0) {
+      this._el.konflikt.hidden = true;
+      return;
+    }
+    const nazwy = lista.map((k) => {
+      const st = this._hass.states[k];
+      return (st && st.attributes.friendly_name) || k;
+    });
+    this._el.konfliktTresc.textContent =
+      'Te same lampy sa juz sterowane przez: ' + nazwy.join(', ') + '. '
+      + 'Beda sie nawzajem nadpisywac.'
+      + (this._config.automation_entity
+        ? ' Moge je wylaczyc i wlaczyc automatyzacje tej karty.'
+        : ' Moge je wylaczyc; wlasna automatyzacje wskaz w edytorze karty.');
+    this._el.konflikt.hidden = false;
+  }
+
+  async _rozwiazKonflikt() {
+    const lista = this._konflikty || [];
+    for (const k of lista) {
+      const domena = k.split('.')[0];
+      try {
+        await this._hass.callService(domena, 'turn_off', { entity_id: k });
+      } catch (_) { /* brak uprawnien - pomijamy */ }
+    }
+    if (this._config.automation_entity) {
+      try {
+        await this._hass.callService('automation', 'turn_on',
+          { entity_id: this._config.automation_entity });
+      } catch (_) { /* jw. */ }
+    }
+    this._konflikty = [];
+    this._konfliktKlucz = null;
+    this._el.konflikt.hidden = true;
   }
 
   _odswiezSlonce() {
@@ -402,13 +569,9 @@ class OgrodSwiatlaCard extends HTMLElement {
     e.g1.setAttribute('stop-color', g1);
     e.g2.setAttribute('stop-color', g2);
     e.gwiazdy.setAttribute('opacity', String(gwiazdyOpacity));
-    e.poswiata.setAttribute('cx', s.x.toFixed(1));
-    e.poswiata.setAttribute('cy', s.y.toFixed(1));
-    e.poswiata.setAttribute('opacity', String(poswiataOpacity));
-    e.cialo.setAttribute('cx', s.x.toFixed(1));
-    e.cialo.setAttribute('cy', s.y.toFixed(1));
     e.cialo.setAttribute('fill', kolorCiala);
-    e.cialo.setAttribute('r', elew > -8 ? '9' : '7');
+    this._slonceWidoczne = elew > -6;
+    this._poswiataOpacity = this._slonceWidoczne ? poswiataOpacity : 0;
 
     /* Przyciemnienie podworka: pelne slonce -> brak, zmrok -> dim_max.
        Przejscie liniowe miedzy +8 a -8 stopnia wysokosci slonca. */
@@ -423,6 +586,25 @@ class OgrodSwiatlaCard extends HTMLElement {
       e.zmierzch.style.opacity = String(f * (Number.isFinite(maks) ? maks : 0.5));
     }
 
+    /* Wjazd od wschodu do biezacej pozycji przy pierwszym pokazaniu karty. */
+    if (!this._wjechalo && !this._klatka) {
+      const CZAS = 2500;
+      const start = performance.now();
+      const klatka = (chwila) => {
+        const u = Math.min(1, (chwila - start) / CZAS);
+        this._rysujCialo(s, s.postep * (1 - Math.pow(1 - u, 3)));
+        if (u < 1) {
+          this._klatka = requestAnimationFrame(klatka);
+        } else {
+          this._klatka = null;
+          this._wjechalo = true;
+        }
+      };
+      this._klatka = requestAnimationFrame(klatka);
+    } else if (!this._klatka) {
+      this._rysujCialo(s, s.postep);
+    }
+
     e.tWschod.textContent = oscGodzina(s.wschod);
     e.tZachod.textContent = oscGodzina(s.zachod);
     e.tElew.textContent = Number.isFinite(elew) ? elew.toFixed(1) + '°' : '';
@@ -430,12 +612,49 @@ class OgrodSwiatlaCard extends HTMLElement {
     e.iZachod.textContent = oscGodzina(s.zachod);
     // Etykieta z wysokosci slonca, nie z kolejnosci wschodu/zachodu -
     // dzieki temu zawsze zgadza sie z przyciemnieniem podworka.
-    e.podtytul.textContent = (Number.isFinite(elew) && elew > 0) ? 'dzien' : 'noc';
+    if (Number.isFinite(elew) && elew > 0) {
+      e.podtytul.textContent = 'dzien';
+    } else {
+      e.podtytul.textContent = 'noc \u00B7 ' + oscNazwaFazy(oscFazaKsiezyca(Date.now()));
+    }
 
     const offZ = this._offset('zachod');
     const offW = this._offset('wschod');
     e.iWl.textContent = offZ === null ? '--:--' : oscGodzina(s.nastepny_zachod + offZ * 60000);
     e.iWyl.textContent = offW === null ? '--:--' : oscGodzina(s.nastepny_wschod + offW * 60000);
+  }
+
+  /*
+   * Umieszcza slonce albo ksiezyc w pozycji odpowiadajacej postepowi t (0..1).
+   * Wywolywane zarowno przez animacje wjazdu, jak i przy zwyklym odswiezeniu.
+   */
+  _rysujCialo(s, t) {
+    const e = this._el;
+    const poz = oscPozycjaCiala(s.dzien, t);
+    const x = poz.x.toFixed(1);
+    const y = poz.y.toFixed(1);
+
+    if (this._slonceWidoczne) {
+      e.cialo.setAttribute('cx', x);
+      e.cialo.setAttribute('cy', y);
+      e.cialo.setAttribute('opacity', '1');
+      e.poswiata.setAttribute('cx', x);
+      e.poswiata.setAttribute('cy', y);
+      e.poswiata.setAttribute('opacity', String(this._poswiataOpacity));
+      e.ksiezyc.setAttribute('opacity', '0');
+      return;
+    }
+
+    /* Po zmierzchu slonce znika, a jego miejsce zajmuje ksiezyc z faza. */
+    e.cialo.setAttribute('opacity', '0');
+    e.poswiata.setAttribute('opacity', '0');
+    e.ksiezyc.setAttribute('opacity', '1');
+    e.ksPoswiata.setAttribute('cx', x);
+    e.ksPoswiata.setAttribute('cy', y);
+    e.ksTarcza.setAttribute('cx', x);
+    e.ksTarcza.setAttribute('cy', y);
+    e.ksSwiatlo.setAttribute('d',
+      oscSciezkaKsiezyca(Number(x), Number(y), 9, oscFazaKsiezyca(Date.now())));
   }
 
   _offset(klucz) {
@@ -712,6 +931,10 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                                     color: var(--secondary-text-color); }
         .osc-zaawansowane[open] summary { margin-bottom: 10px; }
         .osc-zaawansowane > div { display: grid; gap: 10px; }
+        .osc-krok label select { padding: 7px; border-radius: 8px; max-width: 100%;
+                                 border: 1px solid var(--divider-color);
+                                 background: var(--card-background-color);
+                                 color: var(--primary-text-color); }
       </style>
       <div class="osc-ed">
 
@@ -782,6 +1005,31 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
           </label>
         </div>
 
+        <div class="osc-krok">
+          <h4><span class="nr">4</span> Automatyzacja
+            ${znacznik(this._istnieje(cfg.automation_entity))}</h4>
+          <div class="osc-info">
+            Karta pokazuje stan i pozwala ustawic przesuniecia, ale swiatla
+            przelacza automatyzacja. Wskaz ja tutaj, a karta wykryje inne
+            automatyzacje i harmonogramy sterujace tymi samymi lampami
+            i zaproponuje ich wylaczenie. Gotowy przyklad automatyzacji
+            znajdziesz w README dodatku.
+          </div>
+          <label style="margin-top:10px">Automatyzacja tej karty
+            <select data-rola="automatyzacja">
+              <option value="">-- brak --</option>
+              ${Object.keys(this._hass.states)
+                .filter((e) => e.startsWith('automation.')).sort()
+                .map((e) => {
+                  const n = this._hass.states[e].attributes.friendly_name || e;
+                  return '<option value="' + oscEsc(e) + '"' +
+                    (e === cfg.automation_entity ? ' selected' : '') + '>' +
+                    oscEsc(n) + '</option>';
+                }).join('')}
+            </select>
+          </label>
+        </div>
+
         <details class="osc-zaawansowane osc-krok">
           <summary>Ustawienia zaawansowane</summary>
           <div>
@@ -815,6 +1063,10 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     const plik = this.querySelector('.osc-plik');
     this.querySelector('.osc-btn-wgraj').addEventListener('click', () => plik.click());
     plik.addEventListener('change', () => this._wgrajZdjecie(plik.files && plik.files[0]));
+
+    const selAuto = this.querySelector('select[data-rola="automatyzacja"]');
+    if (selAuto) selAuto.addEventListener('change', () =>
+      this._ustaw({ automation_entity: selAuto.value }, true));
 
     const btnHelpery = this.querySelector('.osc-btn-helpery');
     if (btnHelpery) btnHelpery.addEventListener('click', () => this._utworzHelpery());
