@@ -8,7 +8,7 @@ i zachodem słońca, z animowanym niebem i pogodą.
 *A Home Assistant Lovelace card: a garden plan with lamps driven by sunrise and
 sunset, with an animated sky and live weather.*
 
-![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-2.1.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-2.2.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 ![licencja](https://img.shields.io/badge/licencja%20%C2%B7%20license-MIT-blue)
 
