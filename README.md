@@ -15,6 +15,18 @@ sunset, with an animated sky and live weather.*
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 ![licencja](https://img.shields.io/badge/licencja%20%C2%B7%20license-MIT-blue)
 
+<p align="center">
+  <img src="docs/karta.webp" width="380"
+       alt="Karta w calosci: niebo o zachodzie ze sloncem i ksiezycem naraz, godziny wschodu i zachodu, regulacja przesuniec oraz zdjecie ogrodu z punktami swietlnymi">
+</p>
+
+<p align="center"><em>
+Słońce tuż nad horyzontem i księżyc widoczny jednocześnie — tak wygląda niebo
+na karcie o zachodzie.<br>
+The sun just above the horizon with the moon visible at the same time — the
+card's sky at sunset.
+</em></p>
+
 **[Polski](#polski) · [English](#english)**
 
 ---
