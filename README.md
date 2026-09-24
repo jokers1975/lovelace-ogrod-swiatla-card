@@ -14,7 +14,7 @@ property, decide how many minutes before sunset they should come on and after
 sunrise go off, and the card makes sure this does not clash with automations
 you already have.*
 
-![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-2.5.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-3.0.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 ![licencja](https://img.shields.io/badge/licencja%20%C2%B7%20license-MIT-blue)
 
@@ -40,6 +40,9 @@ w jedno miejsce.
 
 **Wszystko ustawiasz z poziomu karty, bez pisania YAML-a.** Kreator prowadzi
 przez cztery kroki i sam pokazuje, czego brakuje.
+
+Karta jest **dwujęzyczna**: mówi po polsku, gdy Home Assistant jest ustawiony
+na polski, a w każdym innym przypadku po angielsku. Nic nie trzeba włączać.
 
 ### Jak to działa
 
@@ -299,6 +302,9 @@ adjusting four times a year. This card pulls all of it into one place.
 
 **Everything is configured from the card itself, with no YAML.** A four-step
 wizard walks you through it and shows what is still missing.
+
+The card is **bilingual**: it speaks Polish when Home Assistant is set to
+Polish, and English in every other case. Nothing to switch on.
 
 ### How it works
 

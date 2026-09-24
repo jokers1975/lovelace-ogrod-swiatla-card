@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '2.5.0';
+const OSC_WERSJA = '3.0.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -27,10 +27,13 @@ const oscTs = (v) => {
   return Number.isNaN(t) ? null : t;
 };
 
+/* Po polsku wymuszamy format polski; w kazdym innym przypadku zostawiamy
+   ustawienia przegladarki, zeby zegar 12- i 24-godzinny wyszedl naturalnie. */
+let oscLokalizacja;
 const oscGodzina = (ms) =>
   ms === null || ms === undefined
     ? '--:--'
-    : new Date(ms).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    : new Date(ms).toLocaleTimeString(oscLokalizacja, { hour: '2-digit', minute: '2-digit' });
 
 const oscZacisk = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -44,6 +47,258 @@ const oscBezier = (t, p0, p1, p2) => {
 };
 
 /* Tryby swiatla, w ktorych da sie ustawic barwe, oraz zamiana hex <-> rgb. */
+
+/*
+ * Dwujezycznosc. Polski, gdy Home Assistant jest ustawiony na polski;
+ * w kazdym innym przypadku angielski.
+ */
+const oscJezyk = (hass) => {
+  const j = (hass && ((hass.locale && hass.locale.language) || hass.language)) || '';
+  return String(j).toLowerCase().indexOf('pl') === 0 ? 'pl' : 'en';
+};
+
+const OSC_TEKSTY = {
+  pl: {
+    tytulDomyslny: 'Oswietlenie ogrodu',
+    brakKonfiguracji: 'Brak konfiguracji',
+    opisDodatku: 'Plan ogrodu z punktami swietlnymi i animacja pozycji slonca.',
+    dzien: 'dzien',
+    noc: 'noc',
+    fazy: ['now', 'sierp przybywajacy', 'pierwsza kwadra', 'wypukly przybywajacy',
+      'pelnia', 'wypukly ubywajacy', 'ostatnia kwadra', 'sierp ubywajacy'],
+    wschod: 'Wschod',
+    zachod: 'Zachod',
+    wlaczenie: 'Wlaczenie',
+    wylaczenie: 'Wylaczenie',
+    wlaczSwiatla: 'Wlacz swiatla',
+    wylaczSwiatla: 'Wylacz swiatla',
+    brakEncji: (e) => 'brak encji ' + e,
+    offOpis: (klucz, v) => {
+      const narz = klucz === 'zachod' ? 'zachodem' : 'wschodem';
+      const miej = klucz === 'zachod' ? 'zachodzie' : 'wschodzie';
+      if (v === 0) return 'dokladnie o ' + miej;
+      if (v < 0) return Math.abs(v) + ' min przed ' + narz;
+      return v + ' min po ' + miej;
+    },
+    brakObrazka: 'Nie wskazano obrazka ogrodu.<br>Wgraj zdjecie z lotu ptaka'
+      + ' w edytorze karty albo podaj sciezke do pliku.',
+    punktNieprzypisany: 'nieprzypisany punkt',
+    stanNiedostepna: 'niedostepna',
+    stanWlaczone: 'wlaczone',
+    stanWylaczone: 'wylaczone',
+    konfliktTytul: 'Twoje obecne automatyzacje koliduja z ustawieniami tej karty',
+    konfliktTresc: (nazwy, wlasna) =>
+      'Tymi samymi lampami steruje juz ' + nazwy.length + ' '
+      + (nazwy.length === 1 ? 'inne ustawienie' : 'inne ustawienia')
+      + ': ' + nazwy.join(', ') + '. '
+      + 'Beda walczyc o te same swiatla - raz zapali jedno, raz drugie. '
+      + (wlasna
+        ? 'Moge je wylaczyc i zostawic sterowanie wylacznie automatyzacji tej karty ('
+          + wlasna + ').'
+        : 'Moge je wylaczyc. Automatyzacje tej karty wskaz potem w jej edytorze,'
+          + ' w kroku 4.'),
+    konfliktRozwiazZ: 'Wylacz tamte i wlacz moja',
+    konfliktRozwiazBez: 'Wylacz tamte',
+    konfliktIgnoruj: 'Zostaw jak jest',
+
+    krok1: 'Zdjecie ogrodu',
+    krok2: 'Lampy',
+    krok3: 'Sterowanie sloncem',
+    krok4: 'Automatyzacja',
+    gotowe: 'gotowe',
+    doZrobienia: 'do zrobienia',
+    wgrajZdjecie: 'Wgraj zdjecie',
+    wgrajOpis: 'Wlasne zdjecie z lotu ptaka albo zrzut z portalu mapowego.'
+      + ' Plik trafia do magazynu Home Assistanta.',
+    adresZdjecia: 'Adres zdjecia',
+    geoportal: 'W Polsce najdokladniejsze zdjecia z gory daje darmowa ortofotomapa'
+      + ' Glownego Urzedu Geodezji i Kartografii &mdash; rozdzielczosc rzedu 5 cm'
+      + ' na piksel, czyli kilkanascie razy lepiej niz zwykle mapy internetowe.'
+      + ' Obejmuje caly kraj.',
+    geoportalLink: 'Otworz Geoportal',
+    geoportalPo: 'Znajdz swoj adres, wylacz wszystkie warstwy, zrob zrzut ekranu'
+      + ' i wgraj go powyzej. Poza Polska poszukaj krajowego odpowiednika albo'
+      + ' uzyj wlasnego zdjecia z drona.',
+    lampyOpis: 'Klikniecie w wolne miejsce obrazka <b>dodaje punkt</b>.'
+      + ' Przytrzymanie i przeciagniecie punktu <b>przesuwa</b> go.'
+      + ' Klikniecie w gotowy punkt <b>zaznacza</b> go &mdash; wtedy mozna przypisac'
+      + ' mu encje albo go skasowac.'
+      + ' Lampy, ktore obsluguja kolor, maja na liscie ponizej <b>probke barwy</b>.',
+    lampyLicznik: (ile, zEncja) => '<br>Punktow: ' + ile + ', z przypisana encja: ' + zEncja + '.',
+    najpierwZdjecie: 'Najpierw dodaj zdjecie w kroku 1.',
+    wybierzEncje: '-- wybierz encje --',
+    brakPunktow: 'Brak punktow.',
+    punktNr: (i) => 'Punkt ' + i,
+    usunPunkt: 'Usun punkt',
+    usunPunktTyt: 'usun punkt',
+    barwaZapalenia: 'Barwa zapalenia',
+    bezWymuszania: 'Bez wymuszania',
+    pelnaPaleta: 'Pelna paleta',
+    barwaUstawiona: (hex) => 'Karta zapali te lampe w barwie ' + hex + '.',
+    barwaZacheta: 'Ta lampa obsluguje kolor. Wybierz barwe, jesli chcesz, zeby karta'
+      + ' zapalala ja zawsze tak samo.',
+    barwaProbkaTyt: (hex) => hex ? 'Barwa zapalenia: ' + hex
+      : 'Barwa niewymuszana - kliknij, zeby wybrac',
+    kelwiny: 'Temperatura barwowa (K)',
+    kelwinyTyt: 'Temperatura barwowa w kelwinach',
+    bialaOpis: 'Ta lampa pozwala regulowac biel.',
+    barwy: ['ciepla biel', 'biel', 'bursztyn', 'zolty', 'pomaranczowy', 'czerwony',
+      'rozowy', 'fioletowy', 'niebieski', 'turkusowy', 'zielony', 'limonkowy'],
+    helperyOk: 'Helpery offsetow sa podlaczone. Wartosci ustawisz juz na samej karcie.',
+    utworzHelpery: 'Utworz helpery',
+    helperyOpis: 'Karta potrzebuje dwoch encji input_number na przesuniecia wzgledem'
+      + ' zachodu i wschodu. Moge je zalozyc automatycznie.',
+    przyciemnienie: 'Maksymalne przyciemnienie nocne (0 = brak, 1 = czern)',
+    encjaPogody: 'Encja pogody (opcjonalnie)',
+    bezPogody: '-- bez pogody --',
+    pogodaOpis: 'Po wskazaniu pogody na niebie pojawiaja sie chmury, deszcz albo snieg,'
+      + ' a po bokach drzewa &mdash; zielone od wiosny do jesieni, zima bez lisci.'
+      + ' Przy wietrze powyzej 10 km/h drzewa zaczynaja sie bujac, powyzej 30 km/h mocniej.',
+    automatyzacjaOpis: 'Karta pokazuje stan i pozwala ustawic przesuniecia, ale swiatla'
+      + ' przelacza automatyzacja. Wskaz ja tutaj, a karta wykryje inne automatyzacje'
+      + ' i harmonogramy sterujace tymi samymi lampami i zaproponuje ich wylaczenie.'
+      + ' Gotowy przyklad znajdziesz w opisie dodatku.',
+    automatyzacjaKarty: 'Automatyzacja tej karty',
+    brakOpcji: '-- brak --',
+    zaawansowane: 'Ustawienia zaawansowane',
+    tytul: 'Tytul',
+    encjaSlonca: 'Encja slonca',
+    encjaZachodu: 'Encja offsetu zachodu (wlaczenie)',
+    encjaWschodu: 'Encja offsetu wschodu (wylaczenie)',
+    wysylanie: 'Wysylanie...',
+    wysylkaBlad: (m) => 'Nie udalo sie wyslac: ' + m,
+    wysylkaBrakApi: 'Ta wersja Home Assistanta nie udostepnia wysylki obrazow.'
+      + ' Skopiuj plik do /config/www i podaj sciezke /local/nazwa.jpg.',
+    brakOdpowiedzi: 'brak identyfikatora w odpowiedzi',
+    tworzenie: 'Tworzenie...',
+    tworzenieOk: 'Gotowe.',
+    tworzenieBlad: (m) => 'Nie udalo sie utworzyc: ' + m,
+    tworzenieBrakApi: 'Brak dostepu do API - dodaj helpery recznie.',
+    nieOdnaleziono: (n) => 'utworzono, ale nie odnaleziono encji ' + n,
+    helperZachod: 'Ogrod - wlacz wzgledem zachodu',
+    helperWschod: 'Ogrod - wylacz wzgledem wschodu',
+  },
+
+  en: {
+    tytulDomyslny: 'Garden lighting',
+    brakKonfiguracji: 'No configuration',
+    opisDodatku: 'Garden plan with light points and an animated sky.',
+    dzien: 'day',
+    noc: 'night',
+    fazy: ['new moon', 'waxing crescent', 'first quarter', 'waxing gibbous',
+      'full moon', 'waning gibbous', 'last quarter', 'waning crescent'],
+    wschod: 'Sunrise',
+    zachod: 'Sunset',
+    wlaczenie: 'Lights on',
+    wylaczenie: 'Lights off',
+    wlaczSwiatla: 'Switch on',
+    wylaczSwiatla: 'Switch off',
+    brakEncji: (e) => 'missing entity ' + e,
+    offOpis: (klucz, v) => {
+      const zd = klucz === 'zachod' ? 'sunset' : 'sunrise';
+      if (v === 0) return 'exactly at ' + zd;
+      if (v < 0) return Math.abs(v) + ' min before ' + zd;
+      return v + ' min after ' + zd;
+    },
+    brakObrazka: 'No garden photo selected.<br>Upload an aerial photo in the card'
+      + ' editor, or enter a path to the file.',
+    punktNieprzypisany: 'unassigned point',
+    stanNiedostepna: 'unavailable',
+    stanWlaczone: 'on',
+    stanWylaczone: 'off',
+    konfliktTytul: 'Your existing automations clash with this card',
+    konfliktTresc: (nazwy, wlasna) =>
+      (nazwy.length === 1 ? 'Another setting already drives' : nazwy.length
+        + ' other settings already drive')
+      + ' the same lamps: ' + nazwy.join(', ') + '. '
+      + 'They will fight over the same lights, each undoing the other. '
+      + (wlasna
+        ? 'I can switch them off and leave control to this card’s automation ('
+          + wlasna + ').'
+        : 'I can switch them off. Point the card at your own automation later,'
+          + ' in step 4 of the editor.'),
+    konfliktRozwiazZ: 'Disable those, enable mine',
+    konfliktRozwiazBez: 'Disable those',
+    konfliktIgnoruj: 'Leave as is',
+
+    krok1: 'Garden photo',
+    krok2: 'Lamps',
+    krok3: 'Sun control',
+    krok4: 'Automation',
+    gotowe: 'done',
+    doZrobienia: 'to do',
+    wgrajZdjecie: 'Upload photo',
+    wgrajOpis: 'Your own aerial photo or a screenshot from a mapping service.'
+      + ' The file goes into the Home Assistant image store.',
+    adresZdjecia: 'Image address',
+    geoportal: 'Many countries publish free orthophotos through their national'
+      + ' mapping agency, far sharper than ordinary web maps. In Poland the GUGiK'
+      + ' geoportal offers about 5 cm per pixel across the whole country.',
+    geoportalLink: 'Open the Polish geoportal',
+    geoportalPo: 'Find your address, turn every overlay off, take a screenshot and'
+      + ' upload it above. Outside Poland look for your national equivalent, or use'
+      + ' your own drone shot.',
+    lampyOpis: 'Click an empty spot on the image to <b>add a point</b>.'
+      + ' Press and drag a point to <b>move</b> it.'
+      + ' Click an existing point to <b>select</b> it &mdash; then you can assign an'
+      + ' entity or delete it.'
+      + ' Lamps that support colour get a <b>colour swatch</b> in the list below.',
+    lampyLicznik: (ile, zEncja) => '<br>Points: ' + ile + ', with an entity: ' + zEncja + '.',
+    najpierwZdjecie: 'Add a photo in step 1 first.',
+    wybierzEncje: '-- choose an entity --',
+    brakPunktow: 'No points yet.',
+    punktNr: (i) => 'Point ' + i,
+    usunPunkt: 'Delete point',
+    usunPunktTyt: 'delete point',
+    barwaZapalenia: 'Colour when switched on',
+    bezWymuszania: 'No override',
+    pelnaPaleta: 'Full palette',
+    barwaUstawiona: (hex) => 'The card will switch this lamp on in ' + hex + '.',
+    barwaZacheta: 'This lamp supports colour. Pick one if you want the card to switch'
+      + ' it on the same way every time.',
+    barwaProbkaTyt: (hex) => hex ? 'Colour when switched on: ' + hex
+      : 'No colour forced - click to choose one',
+    kelwiny: 'Colour temperature (K)',
+    kelwinyTyt: 'Colour temperature in kelvin',
+    bialaOpis: 'This lamp has tunable white.',
+    barwy: ['warm white', 'white', 'amber', 'yellow', 'orange', 'red',
+      'pink', 'purple', 'blue', 'cyan', 'green', 'lime'],
+    helperyOk: 'Offset helpers are connected. You can set the values on the card itself.',
+    utworzHelpery: 'Create helpers',
+    helperyOpis: 'The card needs two input_number entities for the sunset and sunrise'
+      + ' offsets. I can create them for you.',
+    przyciemnienie: 'Maximum night dimming (0 = none, 1 = black)',
+    encjaPogody: 'Weather entity (optional)',
+    bezPogody: '-- no weather --',
+    pogodaOpis: 'With a weather entity the sky gains clouds, rain or snow, and trees'
+      + ' appear on both sides &mdash; green from spring through autumn, bare in winter.'
+      + ' They start swaying above 10 km/h of wind and sway harder above 30 km/h.',
+    automatyzacjaOpis: 'The card shows the state and lets you set the offsets, but the'
+      + ' switching is done by an automation. Point the card at yours, and it will'
+      + ' detect other automations and schedulers driving the same lamps and offer to'
+      + ' disable them. A ready example is in the add-on description.',
+    automatyzacjaKarty: 'This card’s automation',
+    brakOpcji: '-- none --',
+    zaawansowane: 'Advanced settings',
+    tytul: 'Title',
+    encjaSlonca: 'Sun entity',
+    encjaZachodu: 'Sunset offset entity (switch-on)',
+    encjaWschodu: 'Sunrise offset entity (switch-off)',
+    wysylanie: 'Uploading...',
+    wysylkaBlad: (m) => 'Upload failed: ' + m,
+    wysylkaBrakApi: 'This Home Assistant version does not expose image uploads.'
+      + ' Copy the file into /config/www and enter the path /local/name.jpg.',
+    brakOdpowiedzi: 'no identifier in the response',
+    tworzenie: 'Creating...',
+    tworzenieOk: 'Done.',
+    tworzenieBlad: (m) => 'Could not create: ' + m,
+    tworzenieBrakApi: 'No API access - add the helpers manually.',
+    nieOdnaleziono: (n) => 'created, but the entity was not found: ' + n,
+    helperZachod: 'Garden - switch on relative to sunset',
+    helperWschod: 'Garden - switch off relative to sunrise',
+  },
+};
+
 const OSC_TRYBY_KOLORU = ['hs', 'rgb', 'rgbw', 'rgbww', 'rgbwww', 'xy'];
 
 /*
@@ -224,11 +479,9 @@ const oscNaPanel = (alt, az) => ({
   y: oscZacisk(118 - alt * 1.7, 10, 146),
 });
 
-const OSC_NAZWY_FAZ = ['now', 'sierp przybywajacy', 'pierwsza kwadra',
-  'wypukly przybywajacy', 'pelnia', 'wypukly ubywajacy', 'ostatnia kwadra',
-  'sierp ubywajacy'];
 /* Osiem nazw, kazda obejmuje osma czesc cyklu wysrodkowana na swojej fazie. */
-const oscNazwaFazy = (f) => OSC_NAZWY_FAZ[Math.floor(((f + 1 / 16) % 1) * 8) % 8];
+const oscNazwaFazy = (f, jezyk) =>
+  OSC_TEKSTY[jezyk].fazy[Math.floor(((f + 1 / 16) % 1) * 8) % 8];
 
 const oscSciezkaKsiezyca = (cx, cy, r, f) => {
   const rosnie = f < 0.5;
@@ -278,7 +531,6 @@ class OgrodSwiatlaCard extends HTMLElement {
   static getStubConfig() {
     return {
       type: 'custom:ogrod-swiatla-card',
-      title: 'Oswietlenie ogrodu',
       image: '',
       sun_entity: 'sun.sun',
       offset_zachod_entity: 'input_number.ogrod_offset_zachod',
@@ -290,10 +542,14 @@ class OgrodSwiatlaCard extends HTMLElement {
     };
   }
 
+  /* Teksty w jezyku interfejsu Home Assistanta. */
+  get _s() {
+    return OSC_TEKSTY[oscJezyk(this._hass)];
+  }
+
   setConfig(config) {
-    if (!config) throw new Error('Brak konfiguracji');
+    if (!config) throw new Error(this._s.brakKonfiguracji);
     this._config = {
-      title: 'Oswietlenie ogrodu',
       sun_entity: 'sun.sun',
       offset_zachod_entity: 'input_number.ogrod_offset_zachod',
       offset_wschod_entity: 'input_number.ogrod_offset_wschod',
@@ -475,7 +731,7 @@ class OgrodSwiatlaCard extends HTMLElement {
           <span class="konflikt-tresc"></span>
           <span class="konflikt-akcje">
             <button class="konflikt-rozwiaz"></button>
-            <button class="konflikt-ignoruj">Zostaw jak jest</button>
+            <button class="konflikt-ignoruj">${this._s.konfliktIgnoruj}</button>
           </span>
         </div>
         <div class="niebo">
@@ -524,10 +780,10 @@ class OgrodSwiatlaCard extends HTMLElement {
           </svg>
         </div>
         <div class="info">
-          <div><span>Wschod</span><span class="i-wschod">--:--</span></div>
-          <div><span>Zachod</span><span class="i-zachod">--:--</span></div>
-          <div><span>Wlaczenie</span><span class="i-wl">--:--</span></div>
-          <div><span>Wylaczenie</span><span class="i-wyl">--:--</span></div>
+          <div><span>${this._s.wschod}</span><span class="i-wschod">--:--</span></div>
+          <div><span>${this._s.zachod}</span><span class="i-zachod">--:--</span></div>
+          <div><span>${this._s.wlaczenie}</span><span class="i-wl">--:--</span></div>
+          <div><span>${this._s.wylaczenie}</span><span class="i-wyl">--:--</span></div>
         </div>
         <div class="offsety"></div>
         <div class="mapa"></div>
@@ -598,8 +854,8 @@ class OgrodSwiatlaCard extends HTMLElement {
         <span class="opis"><b>${tytul}</b><i class="wyjasnienie">&mdash;</i></span>
       </div>`;
     this._el.offsety.innerHTML =
-      wiersz('zachod', 'Wlacz swiatla') +
-      wiersz('wschod', 'Wylacz swiatla');
+      wiersz('zachod', this._s.wlaczSwiatla) +
+      wiersz('wschod', this._s.wylaczSwiatla);
 
     this._el.offsety.querySelectorAll('button').forEach((b) => {
       b.addEventListener('click', (ev) => {
@@ -632,10 +888,7 @@ class OgrodSwiatlaCard extends HTMLElement {
     mapa.innerHTML = '';
 
     if (!this._config.image) {
-      mapa.innerHTML =
-        '<div class="brak">Nie wskazano obrazka ogrodu.<br>' +
-        'Wgraj zdjecie z lotu ptaka do <code>/config/www/</code> i podaj sciezke ' +
-        '<code>/local/nazwa.jpg</code> w edytorze karty.</div>';
+      mapa.innerHTML = '<div class="brak">' + this._s.brakObrazka + '</div>';
       this._el.zmierzch = null;
       return;
     }
@@ -681,7 +934,7 @@ class OgrodSwiatlaCard extends HTMLElement {
   _odswiez() {
     if (!this._zbudowana || !this._hass) return;
     this._rysujPunkty();
-    this._el.tytul.textContent = this._config.title || '';
+    this._el.tytul.textContent = this._config.title || this._s.tytulDomyslny;
     this._odswiezSlonce();
     this._odswiezOffsety();
     this._odswiezStanyPunktow();
@@ -895,21 +1148,10 @@ class OgrodSwiatlaCard extends HTMLElement {
       ? (wlasna.attributes.friendly_name || this._config.automation_entity)
       : null;
 
-    this._el.konfliktTytul.textContent =
-      'Twoje obecne automatyzacje koliduja z ustawieniami tej karty';
-    this._el.konfliktTresc.textContent =
-      'Tymi samymi lampami steruje juz ' + nazwy.length + ' '
-      + (nazwy.length === 1 ? 'inne ustawienie' : 'inne ustawienia')
-      + ': ' + nazwy.join(', ') + '. '
-      + 'Beda walczyc o te same swiatla - raz zapali jedno, raz drugie. '
-      + (nazwaWlasnej
-        ? 'Moge je wylaczyc i zostawic sterowanie wylacznie automatyzacji tej karty '
-          + '(' + nazwaWlasnej + ').'
-        : 'Moge je wylaczyc. Automatyzacje tej karty wskaz potem w jej edytorze, '
-          + 'w kroku 4.');
+    this._el.konfliktTytul.textContent = this._s.konfliktTytul;
+    this._el.konfliktTresc.textContent = this._s.konfliktTresc(nazwy, nazwaWlasnej);
     this._el.konfliktRozwiaz.textContent = nazwaWlasnej
-      ? 'Wylacz tamte i wlacz moja'
-      : 'Wylacz tamte';
+      ? this._s.konfliktRozwiazZ : this._s.konfliktRozwiazBez;
     this._el.konflikt.hidden = false;
   }
 
@@ -934,6 +1176,7 @@ class OgrodSwiatlaCard extends HTMLElement {
 
   _odswiezSlonce() {
     if (!this._zbudowana || !this._hass) return;
+    oscLokalizacja = oscJezyk(this._hass) === 'pl' ? 'pl-PL' : undefined;
     const st = this._hass.states[this._config.sun_entity || 'sun.sun'];
     const s = oscStanSlonca(st);
     if (!s) return;
@@ -1008,8 +1251,10 @@ class OgrodSwiatlaCard extends HTMLElement {
     // Etykieta z wysokosci slonca, nie z kolejnosci wschodu/zachodu -
     // dzieki temu zawsze zgadza sie z przyciemnieniem podworka.
     const nb = this._niebo(Date.now());
-    let opis = (Number.isFinite(elew) && elew > 0) ? 'dzien' : 'noc';
-    if (nb && nb.ksiezyc.alt > -1) opis += ' \u00B7 ' + oscNazwaFazy(nb.faza);
+    let opis = (Number.isFinite(elew) && elew > 0) ? this._s.dzien : this._s.noc;
+    if (nb && nb.ksiezyc.alt > -1) {
+      opis += ' \u00B7 ' + oscNazwaFazy(nb.faza, oscJezyk(this._hass));
+    }
     e.podtytul.textContent = opis;
 
     const offZ = this._offset('zachod');
@@ -1142,19 +1387,14 @@ class OgrodSwiatlaCard extends HTMLElement {
       const v = this._offset(klucz);
       const wart = rzad.querySelector('.wart');
       const wyj = rzad.querySelector('.wyjasnienie');
-      // 'przed' wymaga narzednika, 'po' i 'o' - miejscownika
-      const narzednik = klucz === 'zachod' ? 'zachodem' : 'wschodem';
-      const miejscownik = klucz === 'zachod' ? 'zachodzie' : 'wschodzie';
       if (v === null) {
         wart.textContent = '—';
-        wyj.textContent = 'brak encji ' +
-          (klucz === 'zachod' ? this._config.offset_zachod_entity : this._config.offset_wschod_entity);
+        wyj.textContent = this._s.brakEncji(klucz === 'zachod'
+          ? this._config.offset_zachod_entity : this._config.offset_wschod_entity);
         return;
       }
       wart.textContent = (v > 0 ? '+' : '') + v + ' min';
-      if (v === 0) wyj.textContent = 'dokladnie o ' + miejscownik;
-      else if (v < 0) wyj.textContent = Math.abs(v) + ' min przed ' + narzednik;
-      else wyj.textContent = v + ' min po ' + miejscownik;
+      wyj.textContent = this._s.offOpis(klucz, v);
     });
   }
 
@@ -1175,8 +1415,9 @@ class OgrodSwiatlaCard extends HTMLElement {
       const nazwa = p.name
         || (st && st.attributes.friendly_name)
         || p.entity
-        || 'nieprzypisany punkt';
-      const stan = !st ? 'niedostepna' : (st.state === 'on' ? 'wlaczone' : 'wylaczone');
+        || this._s.punktNieprzypisany;
+      const stan = !st ? this._s.stanNiedostepna
+        : (st.state === 'on' ? this._s.stanWlaczone : this._s.stanWylaczone);
       d.querySelector('.etykieta').textContent = nazwa + ' · ' + stan;
     });
   }
@@ -1186,17 +1427,16 @@ class OgrodSwiatlaCard extends HTMLElement {
 
 /* Definicje helperow offsetu tworzonych na zadanie z kreatora. */
 const OSC_HELPERY = {
-  offset_zachod_entity: {
-    name: 'Ogrod - wlacz wzgledem zachodu',
-    icon: 'mdi:weather-sunset-down',
-  },
-  offset_wschod_entity: {
-    name: 'Ogrod - wylacz wzgledem wschodu',
-    icon: 'mdi:weather-sunset-up',
-  },
+  offset_zachod_entity: { klucz: 'helperZachod', icon: 'mdi:weather-sunset-down' },
+  offset_wschod_entity: { klucz: 'helperWschod', icon: 'mdi:weather-sunset-up' },
 };
 
 class OgrodSwiatlaCardEditor extends HTMLElement {
+  /* Teksty w jezyku interfejsu Home Assistanta. */
+  get _s() {
+    return OSC_TEKSTY[oscJezyk(this._hass)];
+  }
+
   setConfig(config) {
     this._config = { points: [], ...config };
     this._render();
@@ -1242,21 +1482,20 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     if (!plik) return;
     const stan = this.querySelector('.osc-stan-zdjecie');
     if (!this._hass || typeof this._hass.fetchWithAuth !== 'function') {
-      if (stan) stan.textContent = 'Ta wersja Home Assistanta nie udostepnia wysylki obrazow. '
-        + 'Skopiuj plik do /config/www i podaj sciezke /local/nazwa.jpg.';
+      if (stan) stan.textContent = this._s.wysylkaBrakApi;
       return;
     }
-    if (stan) stan.textContent = 'Wysylanie...';
+    if (stan) stan.textContent = this._s.wysylanie;
     try {
       const dane = new FormData();
       dane.append('file', plik);
       const odp = await this._hass.fetchWithAuth('/api/image/upload', { method: 'POST', body: dane });
       if (!odp.ok) throw new Error('HTTP ' + odp.status);
       const wynik = await odp.json();
-      if (!wynik || !wynik.id) throw new Error('brak identyfikatora w odpowiedzi');
+      if (!wynik || !wynik.id) throw new Error(this._s.brakOdpowiedzi);
       this._ustaw({ image: '/api/image/serve/' + wynik.id + '/original' }, true);
     } catch (e) {
-      if (stan) stan.textContent = 'Nie udalo sie wyslac: ' + e.message;
+      if (stan) stan.textContent = this._s.wysylkaBlad(e.message);
     }
   }
 
@@ -1268,17 +1507,18 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
   async _utworzHelpery() {
     const stan = this.querySelector('.osc-stan-helpery');
     if (!this._hass || typeof this._hass.callWS !== 'function') {
-      if (stan) stan.textContent = 'Brak dostepu do API - dodaj helpery recznie.';
+      if (stan) stan.textContent = this._s.tworzenieBrakApi;
       return;
     }
-    if (stan) stan.textContent = 'Tworzenie...';
+    if (stan) stan.textContent = this._s.tworzenie;
     const zmiany = {};
     try {
       for (const [klucz, def] of Object.entries(OSC_HELPERY)) {
         if (this._istnieje(this._config[klucz])) continue;
+        const nazwaHelpera = this._s[def.klucz];
         await this._hass.callWS({
           type: 'input_number/create',
-          name: def.name,
+          name: nazwaHelpera,
           icon: def.icon,
           min: -120,
           max: 120,
@@ -1291,16 +1531,16 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
           await new Promise((r) => setTimeout(r, 150));
           encja = Object.keys(this._hass.states).find((e) =>
             e.startsWith('input_number.') &&
-            this._hass.states[e].attributes.friendly_name === def.name);
+            this._hass.states[e].attributes.friendly_name === nazwaHelpera);
         }
-        if (!encja) throw new Error('utworzono, ale nie odnaleziono encji ' + def.name);
+        if (!encja) throw new Error(this._s.nieOdnaleziono(nazwaHelpera));
         zmiany[klucz] = encja;
       }
-      if (stan) stan.textContent = 'Gotowe.';
+      if (stan) stan.textContent = this._s.tworzenieOk;
       if (Object.keys(zmiany).length) this._ustaw(zmiany, true);
       else this._render();
     } catch (e) {
-      if (stan) stan.textContent = 'Nie udalo sie utworzyc: ' + e.message;
+      if (stan) stan.textContent = this._s.tworzenieBlad(e.message);
     }
   }
 
@@ -1319,45 +1559,45 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       const domyslny = punkt.color
         || (st.attributes && oscRgbNaHex(st.attributes.rgb_color))
         || '#ffd07a';
-      const probki = OSC_PALETA.map(([hex, nazwa]) =>
+      const nazwyBarw = this._s.barwy;
+      const probki = OSC_PALETA.map(([hex], i) =>
         '<button type="button" data-rola="paleta" data-hex="' + hex + '"'
         + ' class="' + (punkt.color && punkt.color.toLowerCase() === hex ? 'wybrana' : '') + '"'
-        + ' style="background:' + hex + '" title="' + nazwa + '"></button>').join('');
+        + ' style="background:' + hex + '" title="' + oscEsc(nazwyBarw[i]) + '"></button>').join('');
       barwa = `
         <div class="osc-barwa">
-          <b>Barwa zapalenia</b>
+          <b>${this._s.barwaZapalenia}</b>
           <div class="osc-paleta">${probki}</div>
           <div class="osc-barwa-akcje">
-            <button type="button" data-rola="kolor-czysc" class="drobny">Bez wymuszania</button>
+            <button type="button" data-rola="kolor-czysc" class="drobny">${this._s.bezWymuszania}</button>
             <details class="osc-pelna">
-              <summary>Pelna paleta</summary>
+              <summary>${this._s.pelnaPaleta}</summary>
               <input type="color" data-rola="kolor" value="${oscEsc(domyslny)}">
             </details>
           </div>
           <span>${punkt.color
-            ? 'Karta zapali te lampe w barwie ' + oscEsc(punkt.color) + '.'
-            : 'Ta lampa obsluguje kolor. Wybierz barwe, jesli chcesz, zeby karta'
-              + ' zapalala ja zawsze tak samo.'}</span>
+            ? oscEsc(this._s.barwaUstawiona(punkt.color))
+            : this._s.barwaZacheta}</span>
         </div>`;
     } else if (bialaReg) {
       barwa = `
         <div class="osc-barwa">
-          <label>Temperatura barwowa (K)
+          <label>${this._s.kelwiny}
             <input type="text" data-rola="kelwiny"
                    value="${oscEsc(punkt.color_temp_kelvin || '')}"
                    placeholder="np. 2700">
           </label>
-          <button type="button" data-rola="kolor-czysc">Bez wymuszania</button>
-          <span>Ta lampa pozwala regulowac biel.</span>
+          <button type="button" data-rola="kolor-czysc">${this._s.bezWymuszania}</button>
+          <span>${this._s.bialaOpis}</span>
         </div>`;
     }
 
     return `
       <div class="osc-panel">
         <div class="osc-panel-rzad">
-          <b>Punkt ${i + 1}</b>
+          <b>${this._s.punktNr(i + 1)}</b>
           <select data-rola="encja-wybrany">${opcje(punkt.entity)}</select>
-          <button type="button" class="usun" data-rola="usun-wybrany">Usun punkt</button>
+          <button type="button" class="usun" data-rola="usun-wybrany">${this._s.usunPunkt}</button>
         </div>
         ${barwa}
       </div>`;
@@ -1376,13 +1616,13 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       return '<button type="button" data-rola="probka"'
         + ' class="probka' + (punkt.color ? '' : ' pusta') + '"'
         + ' style="--osc-p:' + oscEsc(v) + '"'
-        + ' title="' + (punkt.color ? 'Barwa zapalenia: ' + oscEsc(v)
-          : 'Barwa niewymuszana - kliknij, zeby wybrac') + '"></button>';
+        + ' title="' + oscEsc(this._s.barwaProbkaTyt(punkt.color ? v : null))
+        + '"></button>';
     }
     if (oscObslugujeTemp(st)) {
       return '<input type="text" data-rola="kelwiny-wiersz" class="kelw"'
         + ' value="' + oscEsc(punkt.color_temp_kelvin || '') + '" placeholder="K"'
-        + ' title="Temperatura barwowa w kelwinach">';
+        + ' title="' + oscEsc(this._s.kelwinyTyt) + '">';
     }
     return '';
   }
@@ -1395,7 +1635,7 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     const encje = this._listaEncji();
 
     const opcje = (wybrana) =>
-      '<option value="">-- wybierz encje --</option>' +
+      '<option value="">' + oscEsc(this._s.wybierzEncje) + '</option>' +
       encje.map((e) => {
         const st = this._hass.states[e];
         const n = (st && st.attributes.friendly_name) || e;
@@ -1410,8 +1650,8 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     const helperyOk = this._istnieje(cfg.offset_zachod_entity)
       && this._istnieje(cfg.offset_wschod_entity);
     const znacznik = (ok) => ok
-      ? '<span class="osc-ok">gotowe</span>'
-      : '<span class="osc-todo">do zrobienia</span>';
+      ? '<span class="osc-ok">' + oscEsc(this._s.gotowe) + '</span>'
+      : '<span class="osc-todo">' + oscEsc(this._s.doZrobienia) + '</span>';
 
     this.innerHTML = `
       <style>
@@ -1538,42 +1778,29 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       <div class="osc-ed">
 
         <div class="osc-krok">
-          <h4><span class="nr">1</span> Zdjecie ogrodu ${znacznik(!!cfg.image)}</h4>
+          <h4><span class="nr">1</span> ${this._s.krok1} ${znacznik(!!cfg.image)}</h4>
           <div class="osc-akcja">
-            <button type="button" class="osc-btn-wgraj">Wgraj zdjecie</button>
+            <button type="button" class="osc-btn-wgraj">${this._s.wgrajZdjecie}</button>
             <input type="file" accept="image/*" class="osc-plik" hidden>
-            <span class="osc-stan-zdjecie">Wlasne zdjecie z lotu ptaka albo zrzut
-              z portalu mapowego. Plik trafia do magazynu Home Assistanta.</span>
+            <span class="osc-stan-zdjecie">${this._s.wgrajOpis}</span>
           </div>
-          <label>Adres zdjecia
+          <label>${this._s.adresZdjecia}
             <input type="text" data-pole="image" value="${oscEsc(cfg.image || '')}">
           </label>
           <div class="osc-info" style="margin-top:8px">
-            W Polsce najdokladniejsze zdjecia z gory daje darmowa ortofotomapa
-            Glownego Urzedu Geodezji i Kartografii &mdash; rozdzielczosc rzedu
-            5 cm na piksel, czyli kilkanascie razy lepiej niz zwykle mapy
-            internetowe. Obejmuje caly kraj.
+            ${this._s.geoportal}
             <a href="https://mapy.geoportal.gov.pl/imap/" target="_blank"
-               rel="noopener noreferrer">Otworz Geoportal</a>.
-            Znajdz swoj adres, wlacz warstwe ortofotomapy, zrob zrzut ekranu
-            i wgraj go powyzej. Poza Polska poszukaj krajowego odpowiednika
-            albo uzyj wlasnego zdjecia z drona.
+               rel="noopener noreferrer">${this._s.geoportalLink}</a>.
+            ${this._s.geoportalPo}
           </div>
         </div>
 
         <div class="osc-krok">
-          <h4><span class="nr">2</span> Lampy
+          <h4><span class="nr">2</span> ${this._s.krok2}
             ${znacznik(punkty.length > 0 && przypisane === punkty.length)}</h4>
           <div class="osc-info">
-            Klikniecie w wolne miejsce obrazka <b>dodaje punkt</b>.
-            Przytrzymanie i przeciagniecie punktu <b>przesuwa</b> go.
-            Klikniecie w gotowy punkt <b>zaznacza</b> go &mdash; wtedy mozna przypisac
-            mu encje albo go skasowac.
-            Lampy, ktore obsluguja kolor, maja na liscie ponizej <b>probnik barwy</b>:
-            karta bedzie je zapalac wlasnie w niej.
-            ${punkty.length
-              ? '<br>Punktow: ' + punkty.length + ', z przypisana encja: ' + przypisane + '.'
-              : ''}
+            ${this._s.lampyOpis}
+            ${punkty.length ? this._s.lampyLicznik(punkty.length, przypisane) : ''}
           </div>
           ${cfg.image
             ? `<div class="osc-plotno" style="margin-top:10px">
@@ -1584,7 +1811,7 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                          style="left:${Number(p.x) || 0}%;top:${Number(p.y) || 0}%">${i + 1}</div>`
                  ).join('')}
                </div>`
-            : '<div class="osc-brak" style="margin-top:10px">Najpierw dodaj zdjecie w kroku 1.</div>'}
+            : '<div class="osc-brak" style="margin-top:10px">' + oscEsc(this._s.najpierwZdjecie) + '</div>'}
           ${wybranyPunkt ? this._panelPunktu(w, wybranyPunkt, opcje) : ''}
           <div class="osc-lista">
             ${punkty.map((p, i) => `
@@ -1592,27 +1819,25 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                   <span class="nr">${i + 1}</span>
                   <select data-rola="encja">${opcje(p.entity)}</select>
                   ${this._barwaWiersza(p)}
-                  <button type="button" data-rola="usun" title="usun punkt">&#10005;</button>
+                  <button type="button" data-rola="usun" title="${this._s.usunPunktTyt}">&#10005;</button>
                 </div>`).join('')}
           </div>
         </div>
 
         <div class="osc-krok">
-          <h4><span class="nr">3</span> Sterowanie sloncem ${znacznik(helperyOk)}</h4>
+          <h4><span class="nr">3</span> ${this._s.krok3} ${znacznik(helperyOk)}</h4>
           ${helperyOk
-            ? '<div class="osc-info">Helpery offsetow sa podlaczone. Wartosci ustawisz'
-              + ' juz na samej karcie.</div>'
+            ? '<div class="osc-info">' + oscEsc(this._s.helperyOk) + '</div>'
             : `<div class="osc-akcja">
-                 <button type="button" class="osc-btn-helpery">Utworz helpery</button>
-                 <span class="osc-stan-helpery">Karta potrzebuje dwoch encji input_number
-                   na przesuniecia wzgledem zachodu i wschodu. Moge je zalozyc automatycznie.</span>
+                 <button type="button" class="osc-btn-helpery">${this._s.utworzHelpery}</button>
+                 <span class="osc-stan-helpery">${this._s.helperyOpis}</span>
                </div>`}
-          <label>Maksymalne przyciemnienie nocne (0 = brak, 1 = czern)
+          <label>${this._s.przyciemnienie}
             <input type="text" data-pole="dim_max" value="${oscEsc(cfg.dim_max === undefined ? 0.5 : cfg.dim_max)}">
           </label>
-          <label style="margin-top:10px">Encja pogody (opcjonalnie)
+          <label style="margin-top:10px">${this._s.encjaPogody}
             <select data-rola="pogoda">
-              <option value="">-- bez pogody --</option>
+              <option value="">${this._s.bezPogody}</option>
               ${Object.keys(this._hass.states)
                 .filter((x) => x.startsWith('weather.')).sort()
                 .map((x) => {
@@ -1624,26 +1849,19 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
             </select>
           </label>
           <div class="osc-info" style="margin-top:6px">
-            Po wskazaniu pogody na niebie pojawiaja sie chmury, deszcz albo snieg,
-            a po bokach drzewa &mdash; zielone od wiosny do jesieni, zima bez lisci.
-            Przy wietrze powyzej 10 km/h drzewa zaczynaja sie bujac, powyzej
-            30 km/h mocniej.
+            ${this._s.pogodaOpis}
           </div>
         </div>
 
         <div class="osc-krok">
-          <h4><span class="nr">4</span> Automatyzacja
+          <h4><span class="nr">4</span> ${this._s.krok4}
             ${znacznik(this._istnieje(cfg.automation_entity))}</h4>
           <div class="osc-info">
-            Karta pokazuje stan i pozwala ustawic przesuniecia, ale swiatla
-            przelacza automatyzacja. Wskaz ja tutaj, a karta wykryje inne
-            automatyzacje i harmonogramy sterujace tymi samymi lampami
-            i zaproponuje ich wylaczenie. Gotowy przyklad automatyzacji
-            znajdziesz w README dodatku.
+            ${this._s.automatyzacjaOpis}
           </div>
-          <label style="margin-top:10px">Automatyzacja tej karty
+          <label style="margin-top:10px">${this._s.automatyzacjaKarty}
             <select data-rola="automatyzacja">
-              <option value="">-- brak --</option>
+              <option value="">${this._s.brakOpcji}</option>
               ${Object.keys(this._hass.states)
                 .filter((e) => e.startsWith('automation.')).sort()
                 .map((e) => {
@@ -1657,18 +1875,18 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
         </div>
 
         <details class="osc-zaawansowane osc-krok">
-          <summary>Ustawienia zaawansowane</summary>
+          <summary>${this._s.zaawansowane}</summary>
           <div>
-            <label>Tytul
+            <label>${this._s.tytul}
               <input type="text" data-pole="title" value="${oscEsc(cfg.title || '')}">
             </label>
-            <label>Encja slonca
+            <label>${this._s.encjaSlonca}
               <input type="text" data-pole="sun_entity" value="${oscEsc(cfg.sun_entity || 'sun.sun')}">
             </label>
-            <label>Encja offsetu zachodu (wlaczenie)
+            <label>${this._s.encjaZachodu}
               <input type="text" data-pole="offset_zachod_entity" value="${oscEsc(cfg.offset_zachod_entity || '')}">
             </label>
-            <label>Encja offsetu wschodu (wylaczenie)
+            <label>${this._s.encjaWschodu}
               <input type="text" data-pole="offset_wschod_entity" value="${oscEsc(cfg.offset_wschod_entity || '')}">
             </label>
           </div>
@@ -1849,7 +2067,8 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'ogrod-swiatla-card',
   name: 'Oswietlenie ogrodu',
-  description: 'Plan ogrodu z punktami swietlnymi i animacja pozycji slonca.',
+  description: 'Plan ogrodu z lampami sterowanymi sloncem \u00b7 '
+    + 'Garden plan with lamps driven by the sun.',
   preview: false,
 });
 
