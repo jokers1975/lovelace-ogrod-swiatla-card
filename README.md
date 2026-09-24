@@ -1,42 +1,43 @@
-# Oświetlenie ogrodu — karta Lovelace dla Home Assistanta
+# Oświetlenie ogrodu · Garden Lights Card
 
-Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
-względem wschodu i zachodu słońca.
+Karta Lovelace do Home Assistanta: plan ogrodu z lampami sterowanymi wschodem
+i zachodem słońca, z animowanym niebem i pogodą.
 
-![wersja](https://img.shields.io/badge/wersja-2.0.0-2e7d32)
+*A Home Assistant Lovelace card: a garden plan with lamps driven by sunrise and
+sunset, with an animated sky and live weather.*
+
+![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-2.1.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
+![licencja](https://img.shields.io/badge/licencja%20%C2%B7%20license-MIT-blue)
 
-## Co robi
+**[Polski](#polski) · [English](#english)**
 
-**Słońce i księżyc naraz.** Pozycje obu ciał liczone są z astronomii
-pozycyjnej dla współrzędnych z konfiguracji Home Assistanta — wysokość
-i azymut, a nie sam postęp doby. Dzięki temu **księżyc bywa widoczny w dzień**,
-tak jak na prawdziwym niebie; przy słońcu wysoko nad horyzontem jest po prostu
-bledszy. Dokładność sprawdzona wobec `sun.sun`: różnica 0,05° wysokości
-i 0,01° azymutu.
+---
+
+## Polski
+
+### Co robi
+
+**Słońce i księżyc naraz.** Pozycje obu ciał liczone są z astronomii pozycyjnej
+dla współrzędnych z konfiguracji Home Assistanta — wysokość i azymut, a nie sam
+postęp doby. Dzięki temu księżyc bywa widoczny w dzień, tak jak na prawdziwym
+niebie; przy słońcu wysoko nad horyzontem jest po prostu bledszy. Dokładność
+sprawdzona wobec `sun.sun`: różnica 0,05° wysokości i 0,01° azymutu.
+
+Kreskowany łuk to **rzeczywista droga ciała po niebie w danym dniu**,
+próbkowana tymi samymi wzorami, które ustawiają tarczę — więc tarcza zawsze
+na nim leży. Latem łuk jest wysoki, zimą płaski.
 
 Po wejściu na kartę niebo **odtwarza się od ostatniego wschodu do chwili
-bieżącej** w ciągu około dwóch i pół sekundy, z wyhamowaniem. Animowany jest
-czas, więc obie tarcze jadą swoimi prawdziwymi torami. Próg wschodu uwzględnia
-refrakcję atmosferyczną (−0,833°), żeby zgadzał się z godziną z Home Assistanta.
-
-Kreskowany łuk to **rzeczywista droga Słońca po niebie w danym dniu**,
-próbkowana od wschodu do zachodu tymi samymi wzorami, które ustawiają tarczę —
-dzięki temu Słońce zawsze leży dokładnie na nim. Gdy Księżyc jest nad
-horyzontem, dostaje własny, słabszy łuk; jego tor bywa wyraźnie inny niż
-słoneczny i to jest poprawne.
-
-Niebo zmienia barwę od dnia, przez zmierzch, po noc z gwiazdami.
+bieżącej** w ciągu około dwóch i pół sekundy. Animowany jest czas, więc obie
+tarcze jadą swoimi prawdziwymi torami. Próg wschodu uwzględnia refrakcję
+atmosferyczną (−0,833°), żeby zgadzał się z godziną z Home Assistanta.
 
 Księżyc pokazuje **rzeczywistą fazę**, liczoną z elongacji względem Słońca,
-bez żadnej dodatkowej encji. Terminator to półelipsa o poziomej półosi
-`r·|cos 2πf|`: przy nowiu równa promieniowi, przy kwadrze zerowa, przy pełni
-znów równa, ale z drugiej strony. Sierp przybywający jest oświetlony po prawej,
-ubywający po lewej — zgodnie z widokiem z półkuli północnej. Nazwa fazy trafia
-do podtytułu karty.
+bez żadnej dodatkowej encji. Sierp przybywający jest oświetlony po prawej,
+ubywający po lewej — zgodnie z widokiem z półkuli północnej.
 
-**Pogoda na niebie.** Po wskazaniu encji pogody (pole nieobowiązkowe) niebo
-zaczyna odwzorowywać to, co za oknem:
+**Pogoda na niebie** (pole nieobowiązkowe):
 
 | co w encji | co na karcie |
 |---|---|
@@ -46,94 +47,54 @@ zaczyna odwzorowywać to, co za oknem:
 | `snowy`, `hail` | śnieg |
 | `snowy-rainy` | deszcz ze śniegiem |
 
-Zachmurzenie brane jest z atrybutu `cloud_coverage`, gdy encja go podaje —
-jest dokładniejsze niż sama nazwa stanu.
+Zachmurzenie brane jest z atrybutu `cloud_coverage`, gdy encja go podaje — jest
+dokładniejsze niż sama nazwa stanu.
 
-Po bokach stoją **drzewa** rysowane proceduralnie, a nie składane z kółek:
-korona ma nieregularny, wygładzony obrys wygenerowany z sumy harmonicznych
-i trzy odcienie zieleni sugerujące światło z góry, a zimowe gałęzie pochodzą
-z rekurencyjnego rozgałęzienia, więc naturalnie zwężają się ku końcom.
-Chmury są kłębiaste, z płaską podstawą, cieniem od spodu i podświetleniem
-od góry.
-
-Drzewa są zielone od wiosny do jesieni, zimą bez liści
-(na półkuli południowej pory roku są przesunięte). Przy wietrze od 10 km/h
-zaczynają się bujać, powyżej 30 km/h mocniej. Prędkość przeliczana jest
-z jednostki podanej przez encję — m/s, mph i węzły też działają. Stany
-`windy` i `windy-variant` wymuszają odczuwalny wiatr nawet przy niskim odczycie.
-
-Animacje respektują systemowe ustawienie ograniczenia ruchu
-(`prefers-reduced-motion`).
+Po bokach stoją **drzewa** rysowane proceduralnie: korona ma nieregularny,
+wygładzony obrys wygenerowany z sumy harmonicznych, a zimowe gałęzie pochodzą
+z rekurencyjnego rozgałęzienia, więc naturalnie zwężają się ku końcom. Drzewa są
+zielone od wiosny do jesieni, zimą bez liści (na półkuli południowej pory roku
+są przesunięte). Przy wietrze od 10 km/h zaczynają się bujać, powyżej 30 km/h
+mocniej. Prędkość przeliczana jest z jednostki podanej przez encję — m/s, mph
+i węzły też działają.
 
 **Plan ogrodu z punktami świetlnymi.** Kliknięcie punktu przełącza przypisaną
-encję, a świecąca lampa dostaje żółtą poświatę. Wieczorem zdjęcie przygasa
-proporcjonalnie do wysokości słońca — płynnie między +8° a −8°, maksymalnie
-o wartość `dim_max`. Warstwa przyciemnienia leży **pod** punktami, więc poświata
-lamp pozostaje czytelna także po zmroku.
+encję, a świecąca lampa dostaje poświatę w swojej barwie. Wieczorem zdjęcie
+przygasa proporcjonalnie do wysokości słońca — płynnie między +8° a −8°,
+maksymalnie o wartość `dim_max`. Warstwa przyciemnienia leży **pod** punktami,
+więc poświata lamp pozostaje czytelna także po zmroku.
 
 **Offsety wschodu i zachodu.** O ile minut przed lub po zachodzie włączyć
 i przed lub po wschodzie wyłączyć oświetlenie. Karta zapisuje je do encji
 `input_number`, dzięki czemu czyta je zwykła automatyzacja Home Assistanta.
 
-## Konfiguracja bez YAML-a
+Animacje respektują systemowe ustawienie ograniczenia ruchu
+(`prefers-reduced-motion`).
 
-Edytor karty prowadzi przez trzy kroki i sam pokazuje, czego jeszcze brakuje:
+### Konfiguracja bez YAML-a
+
+Edytor karty prowadzi przez cztery kroki i sam pokazuje, czego jeszcze brakuje:
 
 1. **Zdjęcie ogrodu** — przycisk *Wgraj zdjęcie* wysyła plik do magazynu obrazów
    Home Assistanta. Nie trzeba niczego kopiować do `/config/www`.
 2. **Lampy** — rozmieszczasz je klikając w zdjęcie.
 3. **Sterowanie słońcem** — przycisk *Utwórz helpery* zakłada oba `input_number`
-   z właściwym zakresem i jednostką, po czym wpisuje je do konfiguracji karty.
+   z właściwym zakresem i jednostką. Tu też wskazuje się encję pogody.
 4. **Automatyzacja** — wskazujesz automatyzację karty, dzięki czemu wykrywanie
    konfliktów wie, czego nie ruszać i co włączyć.
 
-Sekcja *Ustawienia zaawansowane* pozwala podmienić encję słońca albo wskazać
-własne helpery, jeśli już je masz.
+### Skąd wziąć zdjęcie ogrodu
 
-## Instalacja przez HACS
-
-HACS → menu ⋮ → **Custom repositories** → wklej adres tego repozytorium,
-typ **Dashboard** → Add → następnie **Download**.
-
-Instalacja ręczna: skopiuj `dist/ogrod-swiatla-card.js` do `/config/www/`
-i dodaj zasób `/local/ogrod-swiatla-card.js` typu **JavaScript Module**
-w Ustawienia → Dashboardy → ⋮ → Zasoby.
-
-## Skąd wziąć zdjęcie ogrodu
-
-Dowolne zdjęcie z góry. W edytorze karty jest przycisk **Wgraj zdjęcie** —
-plik trafia do magazynu obrazów Home Assistanta i nie trzeba niczego kopiować
-do `/config/www`.
-
-Dobrym źródłem są darmowe ortofotomapy z krajowych serwisów geodezyjnych.
-W Polsce [Geoportal GUGiK](https://mapy.geoportal.gov.pl/imap/) udostępnia
-zdjęcia w rozdzielczości rzędu **5 cm na piksel** — kilkanaście razy dokładniej
-niż popularne mapy internetowe — i obejmuje **cały kraj**. Link do niego jest
-też w kroku 1 edytora. Poza Polską poszukaj krajowego odpowiednika albo użyj
+Dowolne zdjęcie z góry. W Polsce
+[Geoportal GUGiK](https://mapy.geoportal.gov.pl/imap/) udostępnia ortofotomapę
+w rozdzielczości rzędu **5 cm na piksel** — kilkanaście razy dokładniej niż
+popularne mapy internetowe — i obejmuje **cały kraj**. Link do niego jest też
+w kroku 1 edytora. Poza Polską poszukaj krajowego odpowiednika albo użyj
 własnego zdjęcia z drona.
 
 Kadr najlepiej obrócić tak, żeby ulica była na dole, a głąb ogrodu na górze.
 
-## Barwa zapalenia
-
-Gdy przypiszesz do punktu źródło światła obsługujące kolor, edytor sam
-zaproponuje **wybór barwy** — rozpoznaje to po `supported_color_modes`.
-Próbnik stoi **wprost przy lampie na liście**, więc widać go od razu,
-bez zaznaczania punktu na zdjęciu.
-Lampy pozwalające regulować tylko biel dostają zamiast tego pole
-**temperatury barwowej w kelwinach**. Zwykłe lampy i gniazdka nie dostają nic.
-
-Po ustawieniu barwy kliknięcie punktu zapala lampę przez `light.turn_on`
-z `rgb_color` albo `color_temp_kelvin`, więc światło zawsze wstaje w tym
-samym kolorze, a nie w tym, co akurat pamiętało. Przycisk *Bez wymuszania*
-wraca do zwykłego przełączania.
-
-Poświata punktu przyjmuje **barwę, którą lampa faktycznie świeci**
-(z atrybutu `rgb_color`), a gdy lampa jej nie podaje — barwę z konfiguracji.
-
-## Rozmieszczanie lamp
-
-W edytorze karty:
+### Rozmieszczanie lamp
 
 - **kliknięcie w wolne miejsce** obrazka dodaje punkt,
 - **przytrzymanie i przeciągnięcie** punktu przesuwa go (działa też palcem),
@@ -143,20 +104,54 @@ W edytorze karty:
 Współrzędne zapisywane są w procentach szerokości i wysokości obrazka, więc
 punkty trzymają się swoich miejsc niezależnie od rozmiaru ekranu.
 
-## Konfiguracja
+### Barwa zapalenia
+
+Lampy obsługujące kolor dostają **próbnik barwy** wprost przy sobie na liście —
+karta rozpoznaje to po `supported_color_modes`. Lampy pozwalające regulować
+tylko biel dostają pole **temperatury barwowej w kelwinach**. Zwykłe lampy
+i gniazdka nie dostają nic.
+
+Po ustawieniu barwy kliknięcie punktu zapala lampę przez `light.turn_on`
+z `rgb_color` albo `color_temp_kelvin`, więc światło zawsze wstaje w tym samym
+kolorze. Przycisk *Bez wymuszania* wraca do zwykłego przełączania.
+
+### Wykrywanie konfliktów
+
+Karta sprawdza, czy tymi samymi lampami nie steruje już coś innego.
+Automatyzacje znajduje przez wyszukiwarkę powiązań Home Assistanta
+(`search/related`), a harmonogramy — na przykład dodatek Scheduler — po
+atrybucie `entities`. Pod uwagę bierze tylko aktywne, a własną automatyzację
+karty pomija.
+
+Gdy coś znajdzie, pokazuje pasek z wyjaśnieniem i przyciskiem, który wyłącza
+kolidujące wpisy i włącza automatyzację wskazaną w kroku 4.
+
+### Instalacja
+
+HACS → menu ⋮ → **Custom repositories** → wklej adres tego repozytorium,
+typ **Dashboard** → Add → następnie **Download**.
+
+Instalacja ręczna: skopiuj `dist/ogrod-swiatla-card.js` do `/config/www/`
+i dodaj zasób `/local/ogrod-swiatla-card.js` typu **JavaScript Module**
+w Ustawienia → Dashboardy → ⋮ → Zasoby.
+
+### Konfiguracja
 
 ```yaml
 type: custom:ogrod-swiatla-card
 title: Oświetlenie ogrodu
 image: /local/ogrod.jpg
 sun_entity: sun.sun
+weather_entity: weather.home
 offset_zachod_entity: input_number.ogrod_offset_zachod
 offset_wschod_entity: input_number.ogrod_offset_wschod
+automation_entity: automation.ogrod_swiatla
 dim_max: 0.5
 points:
   - entity: light.ogrod_lampa_1
     x: 33
     y: 18
+    color: "#ffd07a"
   - entity: switch.ogrod_lampa_2
     x: 70
     y: 27
@@ -165,25 +160,21 @@ points:
 | pole | domyślnie | znaczenie |
 |---|---|---|
 | `title` | `Oswietlenie ogrodu` | nagłówek karty |
-| `image` | — | tło karty; `x` i `y` punktów liczone są w procentach jego wymiarów |
+| `image` | — | tło karty; `x` i `y` punktów w procentach jego wymiarów |
 | `sun_entity` | `sun.sun` | encja słońca |
+| `weather_entity` | — | encja pogody; bez niej niebo zostaje czyste |
 | `offset_zachod_entity` | — | `input_number` z przesunięciem włączenia |
 | `offset_wschod_entity` | — | `input_number` z przesunięciem wyłączenia |
-| `dim_max` | `0.5` | maksymalne nocne przyciemnienie tła, `0` = brak, `1` = czerń |
-| `weather_entity` | — | encja pogody; bez niej niebo zostaje czyste, a drzewa się nie pojawiają |
-| `automation_entity` | — | automatyzacja karty; włączana przy rozwiązywaniu konfliktu |
-| `points` | `[]` | lista punktów świetlnych z przypisanymi encjami |
+| `automation_entity` | — | automatyzacja karty, włączana przy konflikcie |
+| `dim_max` | `0.5` | maksymalne nocne przyciemnienie tła, `0`–`1` |
+| `points` | `[]` | lista punktów świetlnych |
 
-Każdy punkt przyjmuje `entity`, `x`, `y` oraz opcjonalnie `color` (zapis `#rrggbb`)
+Punkt przyjmuje `entity`, `x`, `y` oraz opcjonalnie `color` (`#rrggbb`)
 albo `color_temp_kelvin`.
 
-Punkt przyjmuje encje z domen `light` i `switch`; kliknięcie wywołuje
-`homeassistant.toggle`.
+### Helpery offsetów
 
-## Helpery offsetów
-
-Najprościej utworzyć je przyciskiem w kroku 3 edytora. Odpowiednik w YAML-u,
-gdyby ktoś wolał ręcznie:
+Najprościej utworzyć je przyciskiem w kroku 3 edytora. Odpowiednik w YAML-u:
 
 ```yaml
 input_number:
@@ -208,28 +199,12 @@ input_number:
 Wartość **ujemna oznacza przed** zdarzeniem, **dodatnia po** zdarzeniu.
 Przykładowo `-15` przy zachodzie to „włącz kwadrans przed zachodem".
 
-## Wykrywanie konfliktów
+### Automatyzacja
 
-Karta sprawdza, czy tymi samymi lampami nie steruje już coś innego. Automatyzacje
-znajduje przez wyszukiwarkę powiązań Home Assistanta (`search/related`),
-a harmonogramy — na przykład dodatek Scheduler — po atrybucie `entities`.
-Pod uwagę bierze tylko te aktywne, a własną automatyzację karty pomija.
-
-Gdy coś znajdzie, pokazuje pasek napisany po ludzku — bez żargonu: co koliduje,
-ile tego jest, dlaczego to problem („będą walczyć o te same światła") i co
-zrobi przycisk. Etykiety dopasowują się do sytuacji: *Wyłącz tamte i włącz moją*,
-gdy wskazałeś własną automatyzację, albo *Wyłącz tamte*, gdy jeszcze nie.
-Drugi przycisk to *Zostaw jak jest*.
-
-Własną automatyzację wskazuje się w kroku 4 edytora (`automation_entity`).
-
-## Automatyzacja
-
-Karta sama nie przełącza świateł o wyznaczonej porze — pokazuje stan i pozwala
-ustawić offsety. Samo przełączanie robi automatyzacja. Wyzwalacze szablonowe
-zawierają `now()`, więc Home Assistant przelicza je na początku każdej minuty,
-a reakcja następuje wyłącznie na zmianę stanu okna — dzięki temu ręczne
-zgaszenie lampy w środku nocy nie jest cofane.
+Karta pokazuje stan i pozwala ustawić offsety, ale światła przełącza
+automatyzacja. Wyzwalacze szablonowe zawierają `now()`, więc Home Assistant
+przelicza je na początku każdej minuty, a reakcja następuje wyłącznie na zmianę
+stanu okna — dzięki temu ręczne zgaszenie lampy w nocy nie jest cofane.
 
 ```yaml
 alias: Ogród – oświetlenie wg wschodu i zachodu słońca
@@ -279,9 +254,143 @@ actions:
               entity_id: *lampy
 ```
 
-Jeśli masz już inne harmonogramy na te same lampy (np. dodatek Scheduler),
-wyłącz je — inaczej będą się nawzajem nadpisywać.
+Jeśli masz już inne harmonogramy na te same lampy, karta je wykryje
+i zaproponuje wyłączenie.
 
-## Licencja
+---
+
+## English
+
+### What it does
+
+**Sun and moon at the same time.** Both positions come from positional astronomy
+using the coordinates in your Home Assistant configuration — altitude and
+azimuth, not a simple progress-through-the-day value. That is why the moon can
+appear during daylight, exactly as it does in the real sky, just fainter while
+the sun is high. Accuracy checked against `sun.sun`: 0.05° in altitude and
+0.01° in azimuth.
+
+The dashed arc is the **real path of the body across the sky on that day**,
+sampled with the same formulas that place the disc, so the disc always sits on
+it. High in summer, flat in winter.
+
+When you open the card, the sky **replays from the last rise up to the current
+moment** over about two and a half seconds. Time is what gets animated, so both
+discs travel their true paths. The rise threshold includes atmospheric
+refraction (−0.833°) so it matches the time Home Assistant reports.
+
+The moon shows its **real phase**, derived from its elongation from the sun,
+with no extra entity required. A waxing crescent is lit on the right, a waning
+one on the left — as seen from the northern hemisphere.
+
+**Weather in the sky** (optional):
+
+| entity state | what you see |
+|---|---|
+| cloud coverage | zero to four drifting clouds |
+| `rainy`, `lightning-rainy` | rain |
+| `pouring` | heavier rain |
+| `snowy`, `hail` | snow |
+| `snowy-rainy` | sleet |
+
+Cloud cover is read from the `cloud_coverage` attribute when the entity
+provides it, which is more precise than the state name alone.
+
+**Trees** stand on both sides, drawn procedurally: the canopy outline is an
+irregular, smoothed shape generated from a sum of harmonics, and the winter
+branches come from recursive branching, so they taper naturally. Trees are green
+from spring through autumn and bare in winter (seasons are shifted in the
+southern hemisphere). They start swaying above 10 km/h of wind and sway harder
+above 30 km/h. Wind speed is converted from whatever unit the entity reports —
+m/s, mph and knots all work.
+
+**Garden plan with light points.** Clicking a point toggles its entity, and a
+lit lamp gets a glow in its own colour. In the evening the photo dims in
+proportion to the sun's altitude — smoothly between +8° and −8°, up to
+`dim_max`. The dimming layer sits **below** the points, so the lamp glow stays
+readable after dark.
+
+**Sunrise and sunset offsets.** How many minutes before or after sunset to
+switch on, and before or after sunrise to switch off. The card stores them in
+`input_number` entities, so an ordinary Home Assistant automation can read them.
+
+Animations honour the system reduced-motion preference.
+
+### Setup without YAML
+
+The card editor walks through four steps and shows what is still missing:
+
+1. **Garden photo** — the *Upload* button sends the file to the Home Assistant
+   image store. Nothing needs to be copied into `/config/www`.
+2. **Lamps** — place them by clicking on the photo.
+3. **Sun control** — a button creates both `input_number` helpers with the right
+   range and unit. The weather entity is chosen here too.
+4. **Automation** — point the card at your automation so conflict detection
+   knows what to leave alone and what to enable.
+
+### Where to get an aerial photo
+
+Any top-down image will do. In Poland the national geoportal
+([GUGiK](https://mapy.geoportal.gov.pl/imap/)) publishes orthophotos at roughly
+**5 cm per pixel**, far sharper than common web maps, covering the whole
+country; the editor links to it. Elsewhere, look for your national mapping
+agency or use your own drone shot.
+
+Rotate the frame so the street is at the bottom and the far end of the garden
+at the top.
+
+### Placing lamps
+
+- **click an empty spot** on the image to add a point,
+- **press and drag** a point to move it (works with a finger too),
+- **click an existing point** to select it, then assign an entity or delete it.
+
+Coordinates are stored as percentages of the image, so points stay put at any
+screen size.
+
+### Colour
+
+Lamps that support colour get a **colour swatch** right next to them in the
+list — detected from `supported_color_modes`. Lamps that only support tunable
+white get a **colour temperature** field in kelvin instead. Plain lamps and
+switches get neither.
+
+Once a colour is set, clicking the point turns the lamp on through
+`light.turn_on` with `rgb_color` or `color_temp_kelvin`, so it always comes up
+the same. The *no override* button restores plain toggling.
+
+### Conflict detection
+
+The card checks whether something else already drives the same lamps.
+Automations are found through Home Assistant's related-items search
+(`search/related`), and schedulers — the Scheduler add-on, for instance —
+through their `entities` attribute. Only active ones count, and the card's own
+automation is excluded.
+
+When it finds something, it shows an explanatory banner with a button that
+disables the conflicting entries and enables the automation chosen in step 4.
+
+### Installation
+
+HACS → ⋮ menu → **Custom repositories** → paste this repository's URL,
+category **Dashboard** → Add → then **Download**.
+
+Manual: copy `dist/ogrod-swiatla-card.js` into `/config/www/` and register
+`/local/ogrod-swiatla-card.js` as a **JavaScript Module** resource under
+Settings → Dashboards → ⋮ → Resources.
+
+### Options
+
+See the Polish configuration table above; the option names are the same. In
+short: `image`, `sun_entity`, `weather_entity`, `offset_zachod_entity`
+(switch-on offset), `offset_wschod_entity` (switch-off offset),
+`automation_entity`, `dim_max` and `points`. Each point takes `entity`, `x`,
+`y` and optionally `color` (`#rrggbb`) or `color_temp_kelvin`.
+
+A negative offset means **before** the event, a positive one **after**.
+
+---
+
+## Licencja · License
 
 MIT.

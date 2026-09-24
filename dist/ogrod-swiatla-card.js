@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '2.0.0';
+const OSC_WERSJA = '2.1.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -345,9 +345,12 @@ class OgrodSwiatlaCard extends HTMLElement {
           display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px;
           padding: 10px 16px 4px 16px; font-size: .82rem;
         }
-        .info div { display: flex; justify-content: space-between; gap: 8px; }
+        /* Godzina tuz przy swoim opisie. Stala szerokosc etykiety ustawia
+           wartosci w rowna kolumne, bez rozpychania ich na krance karty. */
+        .info div { display: flex; gap: 10px; align-items: baseline; }
+        .info span:first-child { color: var(--secondary-text-color);
+                                 min-width: 5.6em; flex: none; }
         .info span:last-child { color: var(--primary-text-color); font-weight: 500; }
-        .info span:first-child { color: var(--secondary-text-color); }
         .offsety { padding: 8px 16px 14px 16px; display: grid; gap: 8px; }
         .offset {
           display: flex; align-items: center; gap: 10px;
