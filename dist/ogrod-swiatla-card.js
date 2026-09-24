@@ -1,0 +1,815 @@
+/*
+ * ogrod-swiatla-card
+ * -------------------------------------------------------------------------
+ * Karta Lovelace: oswietlenie ogrodu sterowane wschodem/zachodem slonca.
+ *
+ *  - animowana pozycja slonca na horyzoncie (dane z sun.sun: azimuth,
+ *    elevation, next_rising, next_setting),
+ *  - zdjecie/plan ogrodu z lotu ptaka z punktami swietlnymi,
+ *  - klikniecie punktu przelacza encje,
+ *  - w edytorze: klikniecie w obrazek dodaje punkt, przeciaganie go przesuwa,
+ *    do kazdego punktu przypisuje sie encje z listy,
+ *  - dwa regulatory: ile minut przed/po zachodzie wlaczyc i przed/po wschodzie
+ *    wylaczyc (zapisywane do input_number, zeby czytala je automatyzacja).
+ *
+ * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
+ */
+
+const OSC_WERSJA = '1.2.0';
+
+const oscEsc = (s) =>
+  String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+
+const oscTs = (v) => {
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? null : t;
+};
+
+const oscGodzina = (ms) =>
+  ms === null || ms === undefined
+    ? '--:--'
+    : new Date(ms).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+
+const oscZacisk = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* Punkt na krzywej Beziera drugiego stopnia. */
+const oscBezier = (t, p0, p1, p2) => {
+  const u = 1 - t;
+  return {
+    x: u * u * p0.x + 2 * u * t * p1.x + t * t * p2.x,
+    y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
+  };
+};
+
+const OSC_P0 = { x: 28, y: 118 };
+const OSC_P1 = { x: 200, y: -26 };
+const OSC_P2 = { x: 372, y: 118 };
+
+/*
+ * Stan slonca na podstawie encji sun.sun. Zwraca doby sloneczna, do ktorej
+ * nalezy biezaca chwila, postep 0..1 oraz wspolrzedne do rysowania.
+ */
+function oscStanSlonca(st) {
+  const a = (st && st.attributes) || {};
+  const nr = oscTs(a.next_rising);
+  const ns = oscTs(a.next_setting);
+  const teraz = Date.now();
+  if (nr === null || ns === null) return null;
+
+  const dzien = ns < nr;
+  const wschod = dzien ? nr - 86400000 : nr;
+  const zachod = dzien ? ns : ns - 86400000;
+
+  let poz;
+  let postep;
+  if (dzien) {
+    postep = oscZacisk((teraz - wschod) / (zachod - wschod), 0, 1);
+    poz = oscBezier(postep, OSC_P0, OSC_P1, OSC_P2);
+  } else {
+    postep = oscZacisk((teraz - zachod) / (nr - zachod), 0, 1);
+    poz = { x: 372 - postep * 344, y: 118 + Math.sin(Math.PI * postep) * 26 };
+  }
+
+  return {
+    dzien,
+    wschod,
+    zachod,
+    nastepny_wschod: nr,
+    nastepny_zachod: ns,
+    postep,
+    x: poz.x,
+    y: poz.y,
+    elewacja: Number(a.elevation),
+    azymut: Number(a.azimuth),
+  };
+}
+
+/* ------------------------------------------------------------------ KARTA */
+
+class OgrodSwiatlaCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement('ogrod-swiatla-card-editor');
+  }
+
+  static getStubConfig() {
+    return {
+      type: 'custom:ogrod-swiatla-card',
+      title: 'Oswietlenie ogrodu',
+      image: '',
+      sun_entity: 'sun.sun',
+      offset_zachod_entity: 'input_number.ogrod_offset_zachod',
+      offset_wschod_entity: 'input_number.ogrod_offset_wschod',
+      dim_max: 0.5,
+      points: [],
+    };
+  }
+
+  setConfig(config) {
+    if (!config) throw new Error('Brak konfiguracji');
+    this._config = {
+      title: 'Oswietlenie ogrodu',
+      sun_entity: 'sun.sun',
+      offset_zachod_entity: 'input_number.ogrod_offset_zachod',
+      offset_wschod_entity: 'input_number.ogrod_offset_wschod',
+      dim_max: 0.5,
+      points: [],
+      ...config,
+    };
+    this._punktyJson = '';
+    if (this._zbudowana) {
+      this._rysujPunkty();
+      this._odswiez();
+    }
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this._zbudowana) this._zbuduj();
+    this._odswiez();
+  }
+
+  getCardSize() {
+    return 10;
+  }
+
+  connectedCallback() {
+    if (!this._tyk) this._tyk = setInterval(() => this._odswiezSlonce(), 30000);
+  }
+
+  disconnectedCallback() {
+    if (this._tyk) { clearInterval(this._tyk); this._tyk = null; }
+  }
+
+  _zbuduj() {
+    this.attachShadow({ mode: 'open' });
+    this.shadowRoot.innerHTML = `
+      <style>
+        ha-card { overflow: hidden; }
+        .naglowek {
+          display: flex; align-items: baseline; justify-content: space-between;
+          gap: 8px; padding: 14px 16px 6px 16px;
+        }
+        .tytul { font-size: 1.25rem; font-weight: 500; }
+        .podtytul { font-size: .8rem; color: var(--secondary-text-color); }
+        .niebo { padding: 0 8px; }
+        svg { display: block; width: 100%; height: auto; }
+        .info {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px;
+          padding: 10px 16px 4px 16px; font-size: .82rem;
+        }
+        .info div { display: flex; justify-content: space-between; gap: 8px; }
+        .info span:last-child { color: var(--primary-text-color); font-weight: 500; }
+        .info span:first-child { color: var(--secondary-text-color); }
+        .offsety { padding: 8px 16px 14px 16px; display: grid; gap: 8px; }
+        .offset {
+          display: flex; align-items: center; gap: 10px;
+          background: var(--secondary-background-color); border-radius: 12px;
+          padding: 8px 10px;
+        }
+        .offset .opis { flex: 1; font-size: .85rem; line-height: 1.25; }
+        .offset .opis b { display: block; font-weight: 500; }
+        .offset .opis i { font-style: normal; color: var(--secondary-text-color); font-size: .78rem; }
+        .offset button {
+          width: 32px; height: 32px; border-radius: 50%; border: none; cursor: pointer;
+          background: var(--card-background-color); color: var(--primary-text-color);
+          font-size: 1.1rem; line-height: 1; flex: none;
+        }
+        .offset button:active { background: var(--primary-color); color: #fff; }
+        .offset .wart { min-width: 62px; text-align: center; font-weight: 500; font-size: .9rem; }
+        .mapa { position: relative; line-height: 0; background: #0d1b12; }
+        .mapa img { width: 100%; display: block; }
+        /* Warstwa zmierzchu: lezy NAD zdjeciem, ale POD punktami swietlnymi,
+           dzieki czemu poswiata zapalonych lamp pozostaje czytelna. */
+        .zmierzch {
+          position: absolute; inset: 0; pointer-events: none;
+          background: radial-gradient(circle at 50% 32%, #0f1836 0%, #04060e 100%);
+          opacity: 0; transition: opacity 3s ease;
+        }
+        .brak {
+          padding: 28px 18px; text-align: center; color: var(--secondary-text-color);
+          font-size: .85rem; line-height: 1.5;
+        }
+        .punkt {
+          position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+          border-radius: 50%; cursor: pointer; border: 2px solid rgba(255,255,255,.85);
+          background: rgba(20,20,20,.55); transition: box-shadow .25s, background .25s;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .punkt .rdzen { width: 8px; height: 8px; border-radius: 50%; background: #ddd; }
+        .punkt.swieci { background: rgba(255,214,102,.35); box-shadow: 0 0 16px 6px rgba(255,208,80,.75); }
+        .punkt.swieci .rdzen { background: #fff3c4; }
+        .punkt.brak-encji { border-style: dashed; border-color: var(--error-color, #d33); }
+        .punkt .etykieta {
+          position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
+          white-space: nowrap; font-size: .68rem; line-height: 1.4; color: #fff;
+          background: rgba(0,0,0,.6); padding: 1px 6px; border-radius: 6px;
+          pointer-events: none; opacity: 0; transition: opacity .2s;
+        }
+        .punkt:hover .etykieta { opacity: 1; }
+      </style>
+      <ha-card>
+        <div class="naglowek">
+          <span class="tytul"></span>
+          <span class="podtytul"></span>
+        </div>
+        <div class="niebo">
+          <svg viewBox="0 0 400 150" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <linearGradient id="grad-niebo" x1="0" y1="0" x2="0" y2="1">
+                <stop class="niebo-g1" offset="0%"/>
+                <stop class="niebo-g2" offset="100%"/>
+              </linearGradient>
+              <radialGradient id="grad-slonce">
+                <stop offset="0%" stop-color="#fff8d0"/>
+                <stop offset="55%" stop-color="#ffd24a"/>
+                <stop offset="100%" stop-color="#ffb300" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <rect x="0" y="0" width="400" height="118" fill="url(#grad-niebo)"/>
+            <g class="gwiazdy" opacity="0"></g>
+            <path d="M28 118 Q200 -26 372 118" fill="none"
+                  stroke="rgba(255,255,255,.35)" stroke-width="1"
+                  stroke-dasharray="3 5"/>
+            <circle class="poswiata" r="26" fill="url(#grad-slonce)"/>
+            <circle class="cialo" r="9"/>
+            <rect x="0" y="118" width="400" height="32" fill="#16351f"/>
+            <path d="M0 118 L400 118" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <text class="t-wschod" x="28" y="136" font-size="10"
+                  text-anchor="middle" fill="rgba(255,255,255,.85)"></text>
+            <text class="t-zachod" x="372" y="136" font-size="10"
+                  text-anchor="middle" fill="rgba(255,255,255,.85)"></text>
+            <text class="t-elew" x="200" y="136" font-size="10"
+                  text-anchor="middle" fill="rgba(255,255,255,.7)"></text>
+          </svg>
+        </div>
+        <div class="info">
+          <div><span>Wschod</span><span class="i-wschod">--:--</span></div>
+          <div><span>Zachod</span><span class="i-zachod">--:--</span></div>
+          <div><span>Wlaczenie</span><span class="i-wl">--:--</span></div>
+          <div><span>Wylaczenie</span><span class="i-wyl">--:--</span></div>
+        </div>
+        <div class="offsety"></div>
+        <div class="mapa"></div>
+      </ha-card>
+    `;
+
+    this._el = {
+      tytul: this.shadowRoot.querySelector('.tytul'),
+      podtytul: this.shadowRoot.querySelector('.podtytul'),
+      g1: this.shadowRoot.querySelector('.niebo-g1'),
+      g2: this.shadowRoot.querySelector('.niebo-g2'),
+      gwiazdy: this.shadowRoot.querySelector('.gwiazdy'),
+      poswiata: this.shadowRoot.querySelector('.poswiata'),
+      cialo: this.shadowRoot.querySelector('.cialo'),
+      tWschod: this.shadowRoot.querySelector('.t-wschod'),
+      tZachod: this.shadowRoot.querySelector('.t-zachod'),
+      tElew: this.shadowRoot.querySelector('.t-elew'),
+      iWschod: this.shadowRoot.querySelector('.i-wschod'),
+      iZachod: this.shadowRoot.querySelector('.i-zachod'),
+      iWl: this.shadowRoot.querySelector('.i-wl'),
+      iWyl: this.shadowRoot.querySelector('.i-wyl'),
+      offsety: this.shadowRoot.querySelector('.offsety'),
+      mapa: this.shadowRoot.querySelector('.mapa'),
+    };
+
+    /* Gwiazdy rysowane raz, pokazywane tylko noca. */
+    const losowe = [
+      [42, 22], [88, 47], [131, 18], [176, 62], [214, 30], [258, 54],
+      [297, 20], [329, 58], [364, 34], [62, 74], [151, 88], [243, 82], [341, 92],
+    ];
+    this._el.gwiazdy.innerHTML = losowe
+      .map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i % 3 === 0 ? 1.4 : 0.9}" fill="#fff" opacity="${0.5 + (i % 4) * 0.12}"/>`)
+      .join('');
+
+    this._zbudujOffsety();
+    this._zbudowana = true;
+    this._rysujPunkty();
+  }
+
+  _zbudujOffsety() {
+    const wiersz = (klucz, tytul) => `
+      <div class="offset" data-klucz="${klucz}">
+        <button data-krok="-5" title="mniej">&minus;</button>
+        <span class="wart">--</span>
+        <button data-krok="5" title="wiecej">+</button>
+        <span class="opis"><b>${tytul}</b><i class="wyjasnienie">&mdash;</i></span>
+      </div>`;
+    this._el.offsety.innerHTML =
+      wiersz('zachod', 'Wlacz swiatla') +
+      wiersz('wschod', 'Wylacz swiatla');
+
+    this._el.offsety.querySelectorAll('button').forEach((b) => {
+      b.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const klucz = b.closest('.offset').dataset.klucz;
+        const encja = klucz === 'zachod'
+          ? this._config.offset_zachod_entity
+          : this._config.offset_wschod_entity;
+        const st = this._hass && this._hass.states[encja];
+        if (!st) return;
+        const min = Number(st.attributes.min);
+        const max = Number(st.attributes.max);
+        const nowa = oscZacisk(Number(st.state) + Number(b.dataset.krok), min, max);
+        this._hass.callService('input_number', 'set_value', {
+          entity_id: encja, value: nowa,
+        });
+      });
+    });
+  }
+
+  /* Przebudowa punktow tylko gdy zmienila sie ich lista, nie przy kazdym stanie. */
+  _rysujPunkty() {
+    if (!this._zbudowana) return;
+    const punkty = Array.isArray(this._config.points) ? this._config.points : [];
+    const json = JSON.stringify([this._config.image, punkty]);
+    if (json === this._punktyJson) return;
+    this._punktyJson = json;
+
+    const mapa = this._el.mapa;
+    mapa.innerHTML = '';
+
+    if (!this._config.image) {
+      mapa.innerHTML =
+        '<div class="brak">Nie wskazano obrazka ogrodu.<br>' +
+        'Wgraj zdjecie z lotu ptaka do <code>/config/www/</code> i podaj sciezke ' +
+        '<code>/local/nazwa.jpg</code> w edytorze karty.</div>';
+      this._el.zmierzch = null;
+      return;
+    }
+
+    const img = document.createElement('img');
+    img.src = this._config.image;
+    img.alt = 'Plan ogrodu';
+    mapa.appendChild(img);
+
+    const zm = document.createElement('div');
+    zm.className = 'zmierzch';
+    mapa.appendChild(zm);
+    this._el.zmierzch = zm;
+
+    punkty.forEach((p, i) => {
+      const d = document.createElement('div');
+      d.className = 'punkt';
+      d.dataset.idx = String(i);
+      d.style.left = (Number(p.x) || 0) + '%';
+      d.style.top = (Number(p.y) || 0) + '%';
+      d.innerHTML = '<span class="rdzen"></span><span class="etykieta"></span>';
+      d.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (!p.entity || !this._hass) return;
+        this._hass.callService('homeassistant', 'toggle', { entity_id: p.entity });
+      });
+      mapa.appendChild(d);
+    });
+  }
+
+  _odswiez() {
+    if (!this._zbudowana || !this._hass) return;
+    this._rysujPunkty();
+    this._el.tytul.textContent = this._config.title || '';
+    this._odswiezSlonce();
+    this._odswiezOffsety();
+    this._odswiezStanyPunktow();
+  }
+
+  _odswiezSlonce() {
+    if (!this._zbudowana || !this._hass) return;
+    const st = this._hass.states[this._config.sun_entity || 'sun.sun'];
+    const s = oscStanSlonca(st);
+    if (!s) return;
+    this._slonce = s;
+
+    const e = this._el;
+    const elew = s.elewacja;
+
+    let g1; let g2; let kolorCiala; let poswiataOpacity; let gwiazdyOpacity;
+    if (elew > 12) {
+      g1 = '#2f7fd4'; g2 = '#8fc4ee'; kolorCiala = '#ffd24a';
+      poswiataOpacity = 1; gwiazdyOpacity = 0;
+    } else if (elew > 0) {
+      g1 = '#3a4f88'; g2 = '#f0a05a'; kolorCiala = '#ff9c33';
+      poswiataOpacity = 1; gwiazdyOpacity = 0.15;
+    } else if (elew > -8) {
+      g1 = '#20264d'; g2 = '#8a5a54'; kolorCiala = '#d97a2b';
+      poswiataOpacity = 0.6; gwiazdyOpacity = 0.5;
+    } else {
+      g1 = '#0b1026'; g2 = '#1d2a4a'; kolorCiala = '#e8ecf5';
+      poswiataOpacity = 0; gwiazdyOpacity = 1;
+    }
+
+    e.g1.setAttribute('stop-color', g1);
+    e.g2.setAttribute('stop-color', g2);
+    e.gwiazdy.setAttribute('opacity', String(gwiazdyOpacity));
+    e.poswiata.setAttribute('cx', s.x.toFixed(1));
+    e.poswiata.setAttribute('cy', s.y.toFixed(1));
+    e.poswiata.setAttribute('opacity', String(poswiataOpacity));
+    e.cialo.setAttribute('cx', s.x.toFixed(1));
+    e.cialo.setAttribute('cy', s.y.toFixed(1));
+    e.cialo.setAttribute('fill', kolorCiala);
+    e.cialo.setAttribute('r', elew > -8 ? '9' : '7');
+
+    /* Przyciemnienie podworka: pelne slonce -> brak, zmrok -> dim_max.
+       Przejscie liniowe miedzy +8 a -8 stopnia wysokosci slonca. */
+    if (e.zmierzch) {
+      const GORA = 8, DOL = -8;
+      const maks = Math.max(0, Math.min(1, Number(this._config.dim_max)));
+      let f;
+      if (!Number.isFinite(elew)) f = 0;
+      else if (elew >= GORA) f = 0;
+      else if (elew <= DOL) f = 1;
+      else f = (GORA - elew) / (GORA - DOL);
+      e.zmierzch.style.opacity = String(f * (Number.isFinite(maks) ? maks : 0.5));
+    }
+
+    e.tWschod.textContent = oscGodzina(s.wschod);
+    e.tZachod.textContent = oscGodzina(s.zachod);
+    e.tElew.textContent = Number.isFinite(elew) ? elew.toFixed(1) + '°' : '';
+    e.iWschod.textContent = oscGodzina(s.wschod);
+    e.iZachod.textContent = oscGodzina(s.zachod);
+    // Etykieta z wysokosci slonca, nie z kolejnosci wschodu/zachodu -
+    // dzieki temu zawsze zgadza sie z przyciemnieniem podworka.
+    e.podtytul.textContent = (Number.isFinite(elew) && elew > 0) ? 'dzien' : 'noc';
+
+    const offZ = this._offset('zachod');
+    const offW = this._offset('wschod');
+    e.iWl.textContent = offZ === null ? '--:--' : oscGodzina(s.nastepny_zachod + offZ * 60000);
+    e.iWyl.textContent = offW === null ? '--:--' : oscGodzina(s.nastepny_wschod + offW * 60000);
+  }
+
+  _offset(klucz) {
+    const encja = klucz === 'zachod'
+      ? this._config.offset_zachod_entity
+      : this._config.offset_wschod_entity;
+    const st = this._hass && this._hass.states[encja];
+    if (!st) return null;
+    const v = Number(st.state);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  _odswiezOffsety() {
+    ['zachod', 'wschod'].forEach((klucz) => {
+      const rzad = this._el.offsety.querySelector('.offset[data-klucz="' + klucz + '"]');
+      if (!rzad) return;
+      const v = this._offset(klucz);
+      const wart = rzad.querySelector('.wart');
+      const wyj = rzad.querySelector('.wyjasnienie');
+      // 'przed' wymaga narzednika, 'po' i 'o' - miejscownika
+      const narzednik = klucz === 'zachod' ? 'zachodem' : 'wschodem';
+      const miejscownik = klucz === 'zachod' ? 'zachodzie' : 'wschodzie';
+      if (v === null) {
+        wart.textContent = '—';
+        wyj.textContent = 'brak encji ' +
+          (klucz === 'zachod' ? this._config.offset_zachod_entity : this._config.offset_wschod_entity);
+        return;
+      }
+      wart.textContent = (v > 0 ? '+' : '') + v + ' min';
+      if (v === 0) wyj.textContent = 'dokladnie o ' + miejscownik;
+      else if (v < 0) wyj.textContent = Math.abs(v) + ' min przed ' + narzednik;
+      else wyj.textContent = v + ' min po ' + miejscownik;
+    });
+  }
+
+  _odswiezStanyPunktow() {
+    const punkty = Array.isArray(this._config.points) ? this._config.points : [];
+    this._el.mapa.querySelectorAll('.punkt').forEach((d) => {
+      const p = punkty[Number(d.dataset.idx)];
+      if (!p) return;
+      const st = p.entity && this._hass.states[p.entity];
+      d.classList.toggle('brak-encji', !st);
+      d.classList.toggle('swieci', !!st && st.state === 'on');
+      const nazwa = p.name
+        || (st && st.attributes.friendly_name)
+        || p.entity
+        || 'nieprzypisany punkt';
+      const stan = !st ? 'niedostepna' : (st.state === 'on' ? 'wlaczone' : 'wylaczone');
+      d.querySelector('.etykieta').textContent = nazwa + ' · ' + stan;
+    });
+  }
+}
+
+/* ---------------------------------------------------------------- EDYTOR */
+
+class OgrodSwiatlaCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = { points: [], ...config };
+    this._render();
+  }
+
+  set hass(hass) {
+    const pierwszy = !this._hass;
+    this._hass = hass;
+    if (pierwszy) this._render();
+  }
+
+  _zmiana() {
+    this.dispatchEvent(new CustomEvent('config-changed', {
+      detail: { config: this._config },
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  _ustaw(zmiany, przerysuj) {
+    this._config = { ...this._config, ...zmiany };
+    this._zmiana();
+    if (przerysuj) this._render();
+  }
+
+  _listaEncji() {
+    if (!this._hass) return [];
+    return Object.keys(this._hass.states)
+      .filter((e) => e.startsWith('light.') || e.startsWith('switch.'))
+      .sort();
+  }
+
+  /*
+   * Wysylka zdjecia przez wbudowane API obrazow Home Assistanta.
+   * Plik ladzie w magazynie HA, a karta dostaje trwaly adres
+   * /api/image/serve/<id>/original - nie trzeba niczego kopiowac do /config/www.
+   */
+  async _wgrajZdjecie(plik) {
+    if (!plik) return;
+    const stan = this.querySelector('.osc-stan-wysylki');
+    if (!this._hass || typeof this._hass.fetchWithAuth !== 'function') {
+      if (stan) stan.textContent = 'Ta wersja Home Assistanta nie udostepnia wysylki obrazow. '
+        + 'Skopiuj plik do /config/www i podaj sciezke /local/nazwa.jpg.';
+      return;
+    }
+    if (stan) stan.textContent = 'Wysylanie...';
+    try {
+      const dane = new FormData();
+      dane.append('file', plik);
+      const odp = await this._hass.fetchWithAuth('/api/image/upload', { method: 'POST', body: dane });
+      if (!odp.ok) throw new Error('HTTP ' + odp.status);
+      const wynik = await odp.json();
+      if (!wynik || !wynik.id) throw new Error('brak identyfikatora w odpowiedzi');
+      this._ustaw({ image: '/api/image/serve/' + wynik.id + '/original' }, true);
+    } catch (e) {
+      if (stan) stan.textContent = 'Nie udalo sie wyslac: ' + e.message;
+    }
+  }
+
+  _render() {
+    if (!this._config || !this._hass) return;
+    const cfg = this._config;
+    const punkty = Array.isArray(cfg.points) ? cfg.points : [];
+    if (this._wybrany !== undefined && this._wybrany >= punkty.length) this._wybrany = undefined;
+    const encje = this._listaEncji();
+
+    const opcje = (wybrana) =>
+      '<option value="">-- wybierz encje --</option>' +
+      encje.map((e) => {
+        const st = this._hass.states[e];
+        const n = (st && st.attributes.friendly_name) || e;
+        return '<option value="' + oscEsc(e) + '"' + (e === wybrana ? ' selected' : '') +
+          '>' + oscEsc(n) + ' (' + oscEsc(e) + ')</option>';
+      }).join('');
+
+    const w = this._wybrany;
+    const wybranyPunkt = w === undefined ? null : punkty[w];
+
+    this.innerHTML = `
+      <style>
+        .osc-ed { display: grid; gap: 12px; padding: 4px 0; }
+        .osc-ed label { display: grid; gap: 4px; font-size: .85rem; }
+        .osc-ed input[type=text] {
+          padding: 8px; border-radius: 8px; border: 1px solid var(--divider-color);
+          background: var(--card-background-color); color: var(--primary-text-color);
+        }
+        .osc-wgraj {
+          display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+          background: var(--secondary-background-color); border-radius: 10px; padding: 10px;
+        }
+        .osc-wgraj button {
+          border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+          background: var(--primary-color); color: #fff; font-size: .85rem;
+        }
+        .osc-stan-wysylki { font-size: .78rem; color: var(--secondary-text-color); flex: 1; }
+        .osc-plotno { position: relative; line-height: 0; border-radius: 10px; overflow: hidden;
+                      border: 1px solid var(--divider-color); cursor: crosshair;
+                      touch-action: none; user-select: none; }
+        .osc-plotno img { width: 100%; display: block; -webkit-user-drag: none; }
+        .osc-pkt { position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px;
+                   border-radius: 50%; background: rgba(255,193,7,.9);
+                   border: 2px solid #fff; cursor: grab; color: #222; font-size: .72rem;
+                   display: flex; align-items: center; justify-content: center;
+                   font-weight: 700; touch-action: none; }
+        .osc-pkt.wybrany { background: #03a9f4; color: #fff;
+                           box-shadow: 0 0 0 4px rgba(3,169,244,.35); }
+        .osc-pkt.pusty { border-style: dashed; }
+        .osc-panel { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+                     background: var(--secondary-background-color);
+                     border-radius: 10px; padding: 10px; }
+        .osc-panel b { font-size: .85rem; }
+        .osc-panel select { flex: 1; min-width: 160px; padding: 6px; border-radius: 8px;
+                            border: 1px solid var(--divider-color);
+                            background: var(--card-background-color);
+                            color: var(--primary-text-color); }
+        .osc-panel .usun { border: none; background: var(--error-color, #d33); color: #fff;
+                           border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+        .osc-lista { display: grid; gap: 8px; }
+        .osc-wiersz { display: flex; gap: 6px; align-items: center; padding: 3px;
+                      border-radius: 8px; }
+        .osc-wiersz.wybrany { background: rgba(3,169,244,.16); }
+        .osc-wiersz .nr { width: 22px; text-align: center; font-weight: 700; font-size: .8rem; }
+        .osc-wiersz select { flex: 1; padding: 6px; border-radius: 8px; max-width: 100%;
+                             border: 1px solid var(--divider-color);
+                             background: var(--card-background-color);
+                             color: var(--primary-text-color); }
+        .osc-wiersz button { border: none; background: var(--error-color, #d33); color: #fff;
+                             border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+        .osc-info { font-size: .8rem; color: var(--secondary-text-color); line-height: 1.5; }
+        .osc-brak { padding: 22px; text-align: center; font-size: .82rem;
+                    color: var(--secondary-text-color);
+                    border: 1px dashed var(--divider-color); border-radius: 10px; }
+      </style>
+      <div class="osc-ed">
+        <label>Tytul
+          <input type="text" data-pole="title" value="${oscEsc(cfg.title || '')}">
+        </label>
+
+        <div class="osc-wgraj">
+          <button type="button" class="osc-btn-wgraj">Wgraj zdjecie</button>
+          <input type="file" accept="image/*" class="osc-plik" hidden>
+          <span class="osc-stan-wysylki">Wlasne zdjecie z lotu ptaka albo zrzut z portalu
+            geodezyjnego. Plik trafia do magazynu Home Assistanta.</span>
+        </div>
+
+        <label>Adres zdjecia
+          <input type="text" data-pole="image" value="${oscEsc(cfg.image || '')}">
+        </label>
+        <label>Encja slonca
+          <input type="text" data-pole="sun_entity" value="${oscEsc(cfg.sun_entity || 'sun.sun')}">
+        </label>
+        <label>Encja offsetu zachodu (wlaczenie)
+          <input type="text" data-pole="offset_zachod_entity" value="${oscEsc(cfg.offset_zachod_entity || '')}">
+        </label>
+        <label>Encja offsetu wschodu (wylaczenie)
+          <input type="text" data-pole="offset_wschod_entity" value="${oscEsc(cfg.offset_wschod_entity || '')}">
+        </label>
+        <label>Maksymalne przyciemnienie nocne (0 = brak, 1 = czern)
+          <input type="text" data-pole="dim_max" value="${oscEsc(cfg.dim_max === undefined ? 0.5 : cfg.dim_max)}">
+        </label>
+
+        <div class="osc-info">
+          Klikniecie w wolne miejsce obrazka <b>dodaje punkt</b>.
+          Przytrzymanie i przeciagniecie punktu <b>przesuwa</b> go.
+          Klikniecie w gotowy punkt <b>zaznacza</b> go &mdash; wtedy mozna przypisac
+          mu encje albo go skasowac.
+        </div>
+
+        ${cfg.image
+          ? `<div class="osc-plotno">
+               <img src="${oscEsc(cfg.image)}" alt="">
+               ${punkty.map((p, i) =>
+                 `<div class="osc-pkt${i === w ? ' wybrany' : ''}${p.entity ? '' : ' pusty'}"
+                       data-idx="${i}"
+                       style="left:${Number(p.x) || 0}%;top:${Number(p.y) || 0}%">${i + 1}</div>`
+               ).join('')}
+             </div>`
+          : '<div class="osc-brak">Wgraj zdjecie albo podaj jego adres, zeby rozmieszczac punkty.</div>'}
+
+        ${wybranyPunkt
+          ? `<div class="osc-panel">
+               <b>Punkt ${w + 1}</b>
+               <select data-rola="encja-wybrany">${opcje(wybranyPunkt.entity)}</select>
+               <button type="button" class="usun" data-rola="usun-wybrany">Usun punkt</button>
+             </div>`
+          : ''}
+
+        <div class="osc-lista">
+          ${punkty.length === 0
+            ? '<div class="osc-info">Brak punktow.</div>'
+            : punkty.map((p, i) => `
+                <div class="osc-wiersz${i === w ? ' wybrany' : ''}" data-idx="${i}">
+                  <span class="nr">${i + 1}</span>
+                  <select data-rola="encja">${opcje(p.entity)}</select>
+                  <button type="button" data-rola="usun" title="usun punkt">&#10005;</button>
+                </div>`).join('')}
+        </div>
+      </div>
+    `;
+
+    this.querySelectorAll('input[data-pole]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        const pole = inp.dataset.pole;
+        const wart = pole === 'dim_max'
+          ? Math.max(0, Math.min(1, parseFloat(inp.value.replace(',', '.')) || 0))
+          : inp.value.trim();
+        this._ustaw({ [pole]: wart }, true);
+      });
+    });
+
+    const plik = this.querySelector('.osc-plik');
+    this.querySelector('.osc-btn-wgraj').addEventListener('click', () => plik.click());
+    plik.addEventListener('change', () => this._wgrajZdjecie(plik.files && plik.files[0]));
+
+    const zmienEncje = (i, wartosc) => {
+      const nowe = this._config.points.slice();
+      nowe[i] = { ...nowe[i], entity: wartosc };
+      this._ustaw({ points: nowe }, true);
+    };
+    const usunPunkt = (i) => {
+      const nowe = this._config.points.slice();
+      nowe.splice(i, 1);
+      if (this._wybrany === i) this._wybrany = undefined;
+      else if (this._wybrany > i) this._wybrany -= 1;
+      this._ustaw({ points: nowe }, true);
+    };
+
+    const selWybrany = this.querySelector('select[data-rola="encja-wybrany"]');
+    if (selWybrany) selWybrany.addEventListener('change', () => zmienEncje(w, selWybrany.value));
+    const usunWybrany = this.querySelector('button[data-rola="usun-wybrany"]');
+    if (usunWybrany) usunWybrany.addEventListener('click', () => usunPunkt(w));
+
+    this.querySelectorAll('select[data-rola="encja"]').forEach((sel) => {
+      sel.addEventListener('change', () =>
+        zmienEncje(Number(sel.closest('.osc-wiersz').dataset.idx), sel.value));
+    });
+    this.querySelectorAll('button[data-rola="usun"]').forEach((b) => {
+      b.addEventListener('click', () =>
+        usunPunkt(Number(b.closest('.osc-wiersz').dataset.idx)));
+    });
+
+    const plotno = this.querySelector('.osc-plotno');
+    if (plotno) this._podepnijPlotno(plotno);
+  }
+
+  _podepnijPlotno(plotno) {
+    const wzgledne = (ev) => {
+      const r = plotno.getBoundingClientRect();
+      return {
+        x: oscZacisk(((ev.clientX - r.left) / r.width) * 100, 0, 100),
+        y: oscZacisk(((ev.clientY - r.top) / r.height) * 100, 0, 100),
+      };
+    };
+
+    /* Dodanie punktu w wolnym miejscu. Po przeciagnieciu klik jest pomijany. */
+    plotno.addEventListener('click', (ev) => {
+      if (this._przeciagano) { this._przeciagano = false; return; }
+      if (ev.target.closest('.osc-pkt')) return;
+      const { x, y } = wzgledne(ev);
+      const nowe = [...(this._config.points || []), { entity: '', x: +x.toFixed(2), y: +y.toFixed(2) }];
+      this._wybrany = nowe.length - 1;
+      this._ustaw({ points: nowe }, true);
+    });
+
+    /* Pointer Events zamiast mysich - dziala tak samo pod palcem na tablecie. */
+    plotno.querySelectorAll('.osc-pkt').forEach((d) => {
+      d.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const i = Number(d.dataset.idx);
+        const start = { x: ev.clientX, y: ev.clientY };
+        let ruszono = false;
+        d.setPointerCapture(ev.pointerId);
+
+        const ruch = (e2) => {
+          if (!ruszono &&
+              Math.abs(e2.clientX - start.x) < 4 && Math.abs(e2.clientY - start.y) < 4) return;
+          ruszono = true;
+          const { x, y } = wzgledne(e2);
+          d.style.left = x + '%';
+          d.style.top = y + '%';
+          d.dataset.x = x.toFixed(2);
+          d.dataset.y = y.toFixed(2);
+        };
+        const koniec = () => {
+          d.removeEventListener('pointermove', ruch);
+          d.removeEventListener('pointerup', koniec);
+          d.removeEventListener('pointercancel', koniec);
+          if (!ruszono) {
+            /* Zwykle klikniecie w punkt: zaznaczenie go. */
+            this._wybrany = (this._wybrany === i) ? undefined : i;
+            this._render();
+            return;
+          }
+          this._przeciagano = true;
+          const nowe = this._config.points.slice();
+          nowe[i] = { ...nowe[i], x: Number(d.dataset.x), y: Number(d.dataset.y) };
+          this._ustaw({ points: nowe }, false);
+        };
+        d.addEventListener('pointermove', ruch);
+        d.addEventListener('pointerup', koniec);
+        d.addEventListener('pointercancel', koniec);
+      });
+    });
+  }
+}
+
+customElements.define('ogrod-swiatla-card', OgrodSwiatlaCard);
+customElements.define('ogrod-swiatla-card-editor', OgrodSwiatlaCardEditor);
+
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: 'ogrod-swiatla-card',
+  name: 'Oswietlenie ogrodu',
+  description: 'Plan ogrodu z punktami swietlnymi i animacja pozycji slonca.',
+  preview: false,
+});
+
+console.info('%c OGROD-SWIATLA-CARD %c ' + OSC_WERSJA + ' ',
+  'color:#fff;background:#2e7d32;font-weight:700',
+  'color:#2e7d32;background:#fff');
