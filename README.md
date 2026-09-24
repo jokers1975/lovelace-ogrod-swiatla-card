@@ -99,6 +99,32 @@ własnego zdjęcia z drona.
 
 Kadr najlepiej obrócić tak, żeby ulica była na dole, a głąb ogrodu na górze.
 
+**Wyłącz wszystkie warstwy.** Geoportal domyślnie nakłada na zdjęcie granice
+działek, numery ewidencyjne, nazwy ulic i inne oznaczenia. Zdejmij je wszystkie
+i zostaw samą ortofotomapę — inaczej na karcie zostaną czerwone linie i napisy,
+których nie da się już usunąć.
+
+Potem wykadruj obszar swojej posesji i zrób zrzut ekranu.
+
+#### Poprawa jakości
+
+Zrzut bywa mało ostry, zwłaszcza po powiększeniu. Można go podciągnąć darmowym
+narzędziem AI — na przykład Gemini. Sprawdzony prompt:
+
+> to jest zdjęcie lotnicze, popraw jakość tego zdjęcia zachowując jak najwięcej
+> szczegółów, nie zmieniaj nic na tym zdjęciu
+
+Ostatni człon jest najważniejszy: bez niego narzędzie chętnie „upiększa" ujęcie,
+dostawiając drzewa albo zmieniając kształt dachu.
+
+| zrzut prosto z Geoportalu | po poprawie narzędziem AI |
+|---|---|
+| ![zrzut z Geoportalu bez żadnych warstw](docs/geoportal-surowe.webp) | ![to samo zdjęcie po poprawie jakości](docs/geoportal-ai.webp) |
+
+Pamiętaj, że takie narzędzia **dorysowują** detal, którego w oryginale nie było.
+Geometria zwykle zostaje nienaruszona, ale drobne tekstury są zmyślone. Do tła
+karty nie ma to znaczenia, do celów pomiarowych już tak.
+
 ### Rozmieszczanie lamp
 
 - **kliknięcie w wolne miejsce** obrazka dodaje punkt,
@@ -353,6 +379,32 @@ agency or use your own drone shot.
 
 Rotate the frame so the street is at the bottom and the far end of the garden
 at the top.
+
+**Turn every overlay off.** Geoportal draws parcel boundaries, cadastral
+numbers, street names and other markings on top of the imagery by default.
+Switch them all off and keep only the orthophoto layer — otherwise those red
+lines and labels end up baked into your card background for good.
+
+Then frame your property and take a screenshot.
+
+#### Sharpening the screenshot
+
+Screenshots often look soft, especially when zoomed in. A free AI tool such as
+Gemini can clean them up. A prompt that works well:
+
+> this is an aerial photograph, improve its quality while preserving as much
+> detail as possible, do not change anything in this photograph
+
+That last clause matters most: without it the tool happily "improves" the scene,
+adding trees or reshaping roofs.
+
+| straight from Geoportal | after AI enhancement |
+|---|---|
+| ![raw geoportal screenshot with all overlays off](docs/geoportal-surowe.webp) | ![the same image after quality enhancement](docs/geoportal-ai.webp) |
+
+Keep in mind that such tools **invent** detail that was never in the original.
+Geometry usually survives intact, but fine textures are fabricated. That is
+harmless for a card background and unacceptable for anything measured.
 
 ### Placing lamps
 
