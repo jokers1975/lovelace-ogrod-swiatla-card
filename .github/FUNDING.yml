@@ -1,9 +1,3 @@
-# Przycisk "Sponsor" w naglowku repozytorium pojawia sie dopiero wtedy, gdy
-# GitHub Sponsors jest aktywny na koncie. Wczesniej ten plik nic nie psuje.
+# Przycisk "Sponsor" w naglowku repozytorium pojawia sie po zatwierdzeniu
+# profilu GitHub Sponsors. Do tego czasu ten plik po prostu nic nie robi.
 github: [jokers1975]
-
-# Inne mozliwosci - odkomentuj te, z ktorej korzystasz:
-# ko_fi: nazwa_uzytkownika
-# buy_me_a_coffee: nazwa_uzytkownika
-# liberapay: nazwa_uzytkownika
-# custom: ["https://revolut.me/nazwa"]

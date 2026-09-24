@@ -262,6 +262,16 @@ actions:
 Jeśli masz już inne harmonogramy na te same lampy, karta je wykryje
 i zaproponuje wyłączenie.
 
+
+### Wesprzyj
+
+Karta powstała po godzinach i jest za darmo, razem z kodem. Jeśli oszczędziła
+Ci wieczoru grzebania w YAML-u albo po prostu ładnie wygląda na ścianie, możesz
+postawić kawę przez [GitHub Sponsors](https://github.com/sponsors/jokers1975).
+Ten sam skutek ma przycisk **Sponsor** w nagłówku repozytorium.
+
+Wsparcie niczego nie odblokowuje — karta była i zostaje w całości darmowa.
+
 ---
 
 ## English
@@ -393,6 +403,16 @@ short: `image`, `sun_entity`, `weather_entity`, `offset_zachod_entity`
 `y` and optionally `color` (`#rrggbb`) or `color_temp_kelvin`.
 
 A negative offset means **before** the event, a positive one **after**.
+
+
+### Support
+
+This card was built after hours and is free, source and all. If it saved you an
+evening of wrestling with YAML, or simply looks good on your wall, you can buy
+me a coffee through [GitHub Sponsors](https://github.com/sponsors/jokers1975).
+The **Sponsor** button in the repository header does the same thing.
+
+Sponsoring unlocks nothing — the card was and stays entirely free.
 
 ---
 
