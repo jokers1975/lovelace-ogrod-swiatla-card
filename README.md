@@ -3,7 +3,7 @@
 Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
 względem wschodu i zachodu słońca.
 
-![wersja](https://img.shields.io/badge/wersja-1.6.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja-1.7.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 
 ## Co robi
@@ -82,6 +82,8 @@ Kadr najlepiej obrócić tak, żeby ulica była na dole, a głąb ogrodu na gór
 
 Gdy przypiszesz do punktu źródło światła obsługujące kolor, edytor sam
 zaproponuje **wybór barwy** — rozpoznaje to po `supported_color_modes`.
+Próbnik stoi **wprost przy lampie na liście**, więc widać go od razu,
+bez zaznaczania punktu na zdjęciu.
 Lampy pozwalające regulować tylko biel dostają zamiast tego pole
 **temperatury barwowej w kelwinach**. Zwykłe lampy i gniazdka nie dostają nic.
 
@@ -176,9 +178,11 @@ znajduje przez wyszukiwarkę powiązań Home Assistanta (`search/related`),
 a harmonogramy — na przykład dodatek Scheduler — po atrybucie `entities`.
 Pod uwagę bierze tylko te aktywne, a własną automatyzację karty pomija.
 
-Gdy coś znajdzie, pokazuje pasek ostrzeżenia z nazwami kolidujących wpisów
-i przyciskiem, który **wyłącza je wszystkie i włącza automatyzację wskazaną
-w konfiguracji karty**. Ostrzeżenie można też zignorować.
+Gdy coś znajdzie, pokazuje pasek napisany po ludzku — bez żargonu: co koliduje,
+ile tego jest, dlaczego to problem („będą walczyć o te same światła") i co
+zrobi przycisk. Etykiety dopasowują się do sytuacji: *Wyłącz tamte i włącz moją*,
+gdy wskazałeś własną automatyzację, albo *Wyłącz tamte*, gdy jeszcze nie.
+Drugi przycisk to *Zostaw jak jest*.
 
 Własną automatyzację wskazuje się w kroku 4 edytora (`automation_entity`).
 

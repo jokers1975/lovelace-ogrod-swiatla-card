@@ -246,6 +246,7 @@ class OgrodSwiatlaCard extends HTMLElement {
         }
         .tytul { font-size: 1.25rem; font-weight: 500; }
         .podtytul { font-size: .8rem; color: var(--secondary-text-color); }
+        .konflikt-tytul { font-size: .88rem; }
         .konflikt {
           margin: 0 16px 8px; padding: 10px 12px; border-radius: 10px;
           background: rgba(255,152,0,.14); border: 1px solid rgba(255,152,0,.45);
@@ -334,10 +335,11 @@ class OgrodSwiatlaCard extends HTMLElement {
           <span class="podtytul"></span>
         </div>
         <div class="konflikt" hidden>
+          <b class="konflikt-tytul"></b>
           <span class="konflikt-tresc"></span>
           <span class="konflikt-akcje">
-            <button class="konflikt-rozwiaz">Wylacz kolidujace</button>
-            <button class="konflikt-ignoruj">Ignoruj</button>
+            <button class="konflikt-rozwiaz"></button>
+            <button class="konflikt-ignoruj">Zostaw jak jest</button>
           </span>
         </div>
         <div class="niebo">
@@ -403,7 +405,9 @@ class OgrodSwiatlaCard extends HTMLElement {
       ksTarcza: this.shadowRoot.querySelector('.ks-tarcza'),
       ksSwiatlo: this.shadowRoot.querySelector('.ks-swiatlo'),
       konflikt: this.shadowRoot.querySelector('.konflikt'),
+      konfliktTytul: this.shadowRoot.querySelector('.konflikt-tytul'),
       konfliktTresc: this.shadowRoot.querySelector('.konflikt-tresc'),
+      konfliktRozwiaz: this.shadowRoot.querySelector('.konflikt-rozwiaz'),
       tWschod: this.shadowRoot.querySelector('.t-wschod'),
       tZachod: this.shadowRoot.querySelector('.t-zachod'),
       tElew: this.shadowRoot.querySelector('.t-elew'),
@@ -594,12 +598,28 @@ class OgrodSwiatlaCard extends HTMLElement {
       const st = this._hass.states[k];
       return (st && st.attributes.friendly_name) || k;
     });
+    const wlasna = this._config.automation_entity
+      ? this._hass.states[this._config.automation_entity]
+      : null;
+    const nazwaWlasnej = wlasna
+      ? (wlasna.attributes.friendly_name || this._config.automation_entity)
+      : null;
+
+    this._el.konfliktTytul.textContent =
+      'Twoje obecne automatyzacje koliduja z ustawieniami tej karty';
     this._el.konfliktTresc.textContent =
-      'Te same lampy sa juz sterowane przez: ' + nazwy.join(', ') + '. '
-      + 'Beda sie nawzajem nadpisywac.'
-      + (this._config.automation_entity
-        ? ' Moge je wylaczyc i wlaczyc automatyzacje tej karty.'
-        : ' Moge je wylaczyc; wlasna automatyzacje wskaz w edytorze karty.');
+      'Tymi samymi lampami steruje juz ' + nazwy.length + ' '
+      + (nazwy.length === 1 ? 'inne ustawienie' : 'inne ustawienia')
+      + ': ' + nazwy.join(', ') + '. '
+      + 'Beda walczyc o te same swiatla - raz zapali jedno, raz drugie. '
+      + (nazwaWlasnej
+        ? 'Moge je wylaczyc i zostawic sterowanie wylacznie automatyzacji tej karty '
+          + '(' + nazwaWlasnej + ').'
+        : 'Moge je wylaczyc. Automatyzacje tej karty wskaz potem w jej edytorze, '
+          + 'w kroku 4.');
+    this._el.konfliktRozwiaz.textContent = nazwaWlasnej
+      ? 'Wylacz tamte i wlacz moja'
+      : 'Wylacz tamte';
     this._el.konflikt.hidden = false;
   }
 
@@ -1011,6 +1031,30 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       </div>`;
   }
 
+  /* Male sterowanie barwa w wierszu listy - zeby nie trzeba bylo najpierw
+     klikac punktu na zdjeciu, zeby w ogole zobaczyc, ze barwe da sie ustawic. */
+  _barwaWiersza(punkt) {
+    const st = punkt.entity ? this._hass.states[punkt.entity] : null;
+    if (!st || !punkt.entity.startsWith('light.')) return '';
+    if (oscObslugujeKolor(st)) {
+      const v = punkt.color
+        || (st.attributes && oscRgbNaHex(st.attributes.rgb_color))
+        || '#ffd07a';
+      return '<input type="color" data-rola="kolor-wiersz" value="' + oscEsc(v) + '"'
+        + ' title="Barwa, w ktorej karta zapali te lampe">'
+        + (punkt.color
+          ? '<button type="button" data-rola="kolor-wiersz-czysc" class="drobny"'
+            + ' title="Nie wymuszaj barwy">bez</button>'
+          : '');
+    }
+    if (oscObslugujeTemp(st)) {
+      return '<input type="text" data-rola="kelwiny-wiersz" class="kelw"'
+        + ' value="' + oscEsc(punkt.color_temp_kelvin || '') + '" placeholder="K"'
+        + ' title="Temperatura barwowa w kelwinach">';
+    }
+    return '';
+  }
+
   _render() {
     if (!this._config || !this._hass) return;
     const cfg = this._config;
@@ -1118,6 +1162,16 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                              color: var(--primary-text-color); }
         .osc-wiersz button { border: none; background: var(--error-color, #d33); color: #fff;
                              border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+        .osc-wiersz input[type=color] { width: 38px; height: 30px; flex: none; padding: 2px;
+                                        border: 1px solid var(--divider-color);
+                                        border-radius: 8px; background: none; cursor: pointer; }
+        .osc-wiersz input.kelw { width: 56px; flex: none; padding: 6px; border-radius: 8px;
+                                 border: 1px solid var(--divider-color);
+                                 background: var(--card-background-color);
+                                 color: var(--primary-text-color); }
+        .osc-wiersz button.drobny { background: var(--card-background-color);
+                                    color: var(--secondary-text-color);
+                                    padding: 6px 8px; font-size: .72rem; }
         .osc-info { font-size: .8rem; color: var(--secondary-text-color); line-height: 1.5; }
         .osc-info a { color: var(--primary-color); }
         .osc-brak { padding: 22px; text-align: center; font-size: .82rem;
@@ -1166,6 +1220,8 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
             Przytrzymanie i przeciagniecie punktu <b>przesuwa</b> go.
             Klikniecie w gotowy punkt <b>zaznacza</b> go &mdash; wtedy mozna przypisac
             mu encje albo go skasowac.
+            Lampy, ktore obsluguja kolor, maja na liscie ponizej <b>probnik barwy</b>:
+            karta bedzie je zapalac wlasnie w niej.
             ${punkty.length
               ? '<br>Punktow: ' + punkty.length + ', z przypisana encja: ' + przypisane + '.'
               : ''}
@@ -1186,6 +1242,7 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                 <div class="osc-wiersz${i === w ? ' wybrany' : ''}" data-idx="${i}">
                   <span class="nr">${i + 1}</span>
                   <select data-rola="encja">${opcje(p.entity)}</select>
+                  ${this._barwaWiersza(p)}
                   <button type="button" data-rola="usun" title="usun punkt">&#10005;</button>
                 </div>`).join('')}
           </div>
@@ -1319,6 +1376,24 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     this.querySelectorAll('button[data-rola="usun"]').forEach((b) => {
       b.addEventListener('click', () =>
         usunPunkt(Number(b.closest('.osc-wiersz').dataset.idx)));
+    });
+    this.querySelectorAll('input[data-rola="kolor-wiersz"]').forEach((inp) => {
+      inp.addEventListener('change', () =>
+        zmienPunkt(Number(inp.closest('.osc-wiersz').dataset.idx),
+          { color: inp.value, color_temp_kelvin: undefined }));
+    });
+    this.querySelectorAll('button[data-rola="kolor-wiersz-czysc"]').forEach((b) => {
+      b.addEventListener('click', () =>
+        zmienPunkt(Number(b.closest('.osc-wiersz').dataset.idx),
+          { color: undefined, color_temp_kelvin: undefined }));
+    });
+    this.querySelectorAll('input[data-rola="kelwiny-wiersz"]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        const k = parseInt(inp.value, 10);
+        zmienPunkt(Number(inp.closest('.osc-wiersz').dataset.idx),
+          { color_temp_kelvin: Number.isFinite(k) && k > 0 ? k : undefined,
+            color: undefined });
+      });
     });
 
     const plotno = this.querySelector('.osc-plotno');
