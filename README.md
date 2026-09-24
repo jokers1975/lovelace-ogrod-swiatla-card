@@ -3,7 +3,7 @@
 Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
 względem wschodu i zachodu słońca.
 
-![wersja](https://img.shields.io/badge/wersja-1.8.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja-1.9.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 
 ## Co robi
@@ -19,6 +19,12 @@ Po wejściu na kartę niebo **odtwarza się od ostatniego wschodu do chwili
 bieżącej** w ciągu około dwóch i pół sekundy, z wyhamowaniem. Animowany jest
 czas, więc obie tarcze jadą swoimi prawdziwymi torami. Próg wschodu uwzględnia
 refrakcję atmosferyczną (−0,833°), żeby zgadzał się z godziną z Home Assistanta.
+
+Kreskowany łuk to **rzeczywista droga Słońca po niebie w danym dniu**,
+próbkowana od wschodu do zachodu tymi samymi wzorami, które ustawiają tarczę —
+dzięki temu Słońce zawsze leży dokładnie na nim. Gdy Księżyc jest nad
+horyzontem, dostaje własny, słabszy łuk; jego tor bywa wyraźnie inny niż
+słoneczny i to jest poprawne.
 
 Niebo zmienia barwę od dnia, przez zmierzch, po noc z gwiazdami.
 

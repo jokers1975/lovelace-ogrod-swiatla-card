@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '1.8.0';
+const OSC_WERSJA = '1.9.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -448,7 +448,10 @@ class OgrodSwiatlaCard extends HTMLElement {
             </defs>
             <rect x="0" y="0" width="400" height="118" fill="url(#grad-niebo)"/>
             <g class="gwiazdy" opacity="0"></g>
-            <path d="M28 118 Q200 -26 372 118" fill="none"
+            <path class="tor-ksiezyca" fill="none"
+                  stroke="rgba(255,255,255,.16)" stroke-width="1"
+                  stroke-dasharray="2 4"/>
+            <path class="tor-slonca" fill="none"
                   stroke="rgba(255,255,255,.35)" stroke-width="1"
                   stroke-dasharray="3 5"/>
             <circle class="poswiata" r="26" fill="url(#grad-slonce)"/>
@@ -490,6 +493,8 @@ class OgrodSwiatlaCard extends HTMLElement {
       gwiazdy: this.shadowRoot.querySelector('.gwiazdy'),
       poswiata: this.shadowRoot.querySelector('.poswiata'),
       cialo: this.shadowRoot.querySelector('.cialo'),
+      torSlonca: this.shadowRoot.querySelector('.tor-slonca'),
+      torKsiezyca: this.shadowRoot.querySelector('.tor-ksiezyca'),
       ksiezyc: this.shadowRoot.querySelector('.ksiezyc'),
       ksPoswiata: this.shadowRoot.querySelector('.ks-poswiata'),
       ksTarcza: this.shadowRoot.querySelector('.ks-tarcza'),
@@ -889,6 +894,7 @@ class OgrodSwiatlaCard extends HTMLElement {
     /* Wjazd od wschodu do biezacej pozycji przy kazdym pokazaniu karty.
        Animujemy czas, wiec obie tarcze jada swoimi prawdziwymi torami. */
     const teraz = Date.now();
+    this._rysujTory(teraz);
     if (!this._wjechalo && !this._klatka) {
       const t0 = this._ostatniWschod(teraz);
       const CZAS = 2500;
@@ -966,6 +972,38 @@ class OgrodSwiatlaCard extends HTMLElement {
       }
     }
     return ts - 6 * 3600000;
+  }
+
+  /*
+   * Tor ciala nad horyzontem: od jego wschodu do zachodu, probkowany
+   * co rowny odstep czasu. Dzieki temu kreskowana linia jest faktyczna
+   * droga po niebie, a tarcza zawsze na niej lezy.
+   */
+  _tor(ktore, ts) {
+    const wys = (t) => {
+      const n = this._niebo(t);
+      return n ? n[ktore].alt : -90;
+    };
+    if (wys(ts) <= -0.9) return '';
+    const KROK = 10 * 60000;
+    let start = ts;
+    let koniec = ts;
+    for (let i = 0; i < 144 && wys(start - KROK) > -0.9; i++) start -= KROK;
+    for (let i = 0; i < 144 && wys(koniec + KROK) > -0.9; i++) koniec += KROK;
+    const N = 56;
+    const kawalki = [];
+    for (let i = 0; i <= N; i++) {
+      const n = this._niebo(start + ((koniec - start) * i) / N);
+      if (!n) return '';
+      const p = oscNaPanel(n[ktore].alt, n[ktore].az);
+      kawalki.push((i ? 'L' : 'M') + p.x.toFixed(1) + ' ' + p.y.toFixed(1));
+    }
+    return kawalki.join(' ');
+  }
+
+  _rysujTory(ts) {
+    this._el.torSlonca.setAttribute('d', this._tor('slonce', ts));
+    this._el.torKsiezyca.setAttribute('d', this._tor('ksiezyc', ts));
   }
 
   /*
