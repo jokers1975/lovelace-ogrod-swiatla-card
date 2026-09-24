@@ -3,7 +3,7 @@
 Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
 względem wschodu i zachodu słońca.
 
-![wersja](https://img.shields.io/badge/wersja-1.9.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja-2.0.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 
 ## Co robi
@@ -49,7 +49,14 @@ zaczyna odwzorowywać to, co za oknem:
 Zachmurzenie brane jest z atrybutu `cloud_coverage`, gdy encja go podaje —
 jest dokładniejsze niż sama nazwa stanu.
 
-Po bokach stoją **drzewa**: zielone od wiosny do jesieni, zimą bez liści
+Po bokach stoją **drzewa** rysowane proceduralnie, a nie składane z kółek:
+korona ma nieregularny, wygładzony obrys wygenerowany z sumy harmonicznych
+i trzy odcienie zieleni sugerujące światło z góry, a zimowe gałęzie pochodzą
+z rekurencyjnego rozgałęzienia, więc naturalnie zwężają się ku końcom.
+Chmury są kłębiaste, z płaską podstawą, cieniem od spodu i podświetleniem
+od góry.
+
+Drzewa są zielone od wiosny do jesieni, zimą bez liści
 (na półkuli południowej pory roku są przesunięte). Przy wietrze od 10 km/h
 zaczynają się bujać, powyżej 30 km/h mocniej. Prędkość przeliczana jest
 z jednostki podanej przez encję — m/s, mph i węzły też działają. Stany

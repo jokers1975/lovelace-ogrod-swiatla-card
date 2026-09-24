@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '1.9.0';
+const OSC_WERSJA = '2.0.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -108,6 +108,32 @@ const oscZima = (ts, lat) => {
   if (Number.isFinite(lat) && lat < 0) m = (m + 6) % 12;
   return m === 11 || m <= 1;
 };
+
+/*
+ * Ksztalty drzew i chmur. Korony to wygladzone obrysy wygenerowane
+ * z sumy kilku harmonicznych - dzieki nieregularnosci nie wygladaja
+ * jak nalozone kola. Galezie zimowe pochodza z rekurencyjnego
+ * rozgalezienia, stad naturalne zwezanie ku koncom.
+ */
+const OSC_KSZTALTY = {
+  koronaDuza: 'M 18.71 0.66 C 18.26 2.05 16.40 3.03 15.62 4.19 C 14.85 5.34 14.79 6.53 14.06 7.60 C 13.32 8.67 12.53 10.03 11.22 10.60 C 9.91 11.18 7.70 10.85 6.18 11.06 C 4.66 11.27 3.55 11.41 2.10 11.88 C 0.66 12.36 -0.82 13.60 -2.48 13.93 C -4.14 14.26 -6.21 14.26 -7.86 13.87 C -9.50 13.49 -11.24 12.62 -12.35 11.61 C -13.46 10.60 -14.23 9.11 -14.49 7.81 C -14.75 6.51 -13.84 4.99 -13.91 3.80 C -13.98 2.61 -14.44 1.91 -14.89 0.66 C -15.34 -0.58 -16.73 -2.33 -16.62 -3.69 C -16.50 -5.05 -15.18 -6.36 -14.21 -7.49 C -13.24 -8.62 -11.86 -9.28 -10.79 -10.45 C -9.71 -11.62 -9.13 -13.61 -7.77 -14.54 C -6.42 -15.46 -4.36 -16.14 -2.68 -15.98 C -1.00 -15.83 0.83 -14.39 2.30 -13.61 C 3.76 -12.82 4.88 -11.99 6.10 -11.26 C 7.33 -10.54 8.37 -9.95 9.65 -9.28 C 10.93 -8.61 12.33 -8.10 13.78 -7.24 C 15.22 -6.39 17.51 -5.46 18.33 -4.14 C 19.15 -2.82 19.16 -0.72 18.71 0.66 Z',
+  koronaSrednia: 'M 10.71 0.40 C 10.35 1.34 8.60 1.97 7.87 2.68 C 7.14 3.38 6.78 3.81 6.34 4.63 C 5.90 5.46 6.01 7.02 5.25 7.64 C 4.49 8.26 2.93 8.23 1.76 8.36 C 0.59 8.49 -0.63 8.57 -1.77 8.41 C -2.92 8.26 -4.20 7.96 -5.09 7.42 C -5.98 6.87 -6.59 5.92 -7.11 5.15 C -7.63 4.38 -7.97 3.58 -8.24 2.78 C -8.51 1.99 -8.37 1.38 -8.73 0.40 C -9.09 -0.59 -10.43 -2.00 -10.40 -3.11 C -10.37 -4.22 -9.54 -5.64 -8.55 -6.25 C -7.56 -6.86 -5.63 -6.47 -4.47 -6.77 C -3.31 -7.08 -2.62 -7.86 -1.61 -8.07 C -0.60 -8.27 0.56 -8.18 1.60 -8.01 C 2.64 -7.84 3.60 -7.42 4.63 -7.03 C 5.66 -6.63 6.88 -6.32 7.78 -5.65 C 8.68 -4.97 9.54 -3.99 10.03 -2.98 C 10.52 -1.98 11.07 -0.55 10.71 0.40 Z',
+  koronaMala: 'M 6.33 0.26 C 6.37 1.04 6.76 1.81 6.48 2.44 C 6.20 3.07 5.39 3.73 4.65 4.03 C 3.90 4.33 2.81 4.06 2.03 4.25 C 1.26 4.43 0.78 4.95 0.00 5.16 C -0.78 5.37 -1.83 5.62 -2.66 5.48 C -3.50 5.34 -4.54 4.89 -5.01 4.32 C -5.47 3.76 -5.23 2.78 -5.46 2.10 C -5.69 1.42 -6.42 0.91 -6.39 0.26 C -6.35 -0.39 -5.61 -1.11 -5.27 -1.80 C -4.93 -2.48 -4.75 -3.11 -4.35 -3.84 C -3.94 -4.57 -3.56 -5.83 -2.84 -6.19 C -2.11 -6.56 -0.84 -6.28 -0.00 -6.04 C 0.84 -5.80 1.54 -5.18 2.20 -4.75 C 2.87 -4.33 3.31 -3.93 3.99 -3.50 C 4.67 -3.07 5.90 -2.82 6.29 -2.19 C 6.68 -1.57 6.30 -0.51 6.33 0.26 Z',
+  pienLisciasty: 'M -1.8 0 C -1.5 -8 -1.2 -14 -0.75 -21 L 0.75 -21 C 1.2 -14 1.5 -8 1.8 0 Z',
+  pienZimowy: 'M -1.6 0 C -1.35 -7 -1.1 -13 -0.7 -20 L 0.7 -20 C 1.1 -13 1.35 -7 1.6 0 Z',
+  konarL: 'M -0.4 -14 C -3 -17 -4.5 -19 -5.6 -22',
+  konarP: 'M 0.4 -16 C 2.6 -19 4 -21 5.2 -24',
+  galezie: [[0, -20, 0.24, -32.0, 2.3], [0.24, -32.0, -3.35, -39.3, 1.38], [-3.35, -39.3, -7.1, -43.21, 0.83], [-7.1, -43.21, -10.57, -44.47, 0.5], [-7.1, -43.21, -8.77, -46.44, 0.5], [-3.35, -39.3, -3.41, -45.09, 0.83], [-3.41, -45.09, -5.56, -48.12, 0.5], [-3.41, -45.09, -2.42, -49.1, 0.5], [0.24, -32.0, 3.66, -38.41, 1.38], [3.66, -38.41, 4.74, -43.65, 0.83], [4.74, -43.65, 4.0, -47.24, 0.5], [4.74, -43.65, 6.22, -46.5, 0.5], [3.66, -38.41, 7.12, -41.16, 0.83], [7.12, -41.16, 8.03, -43.82, 0.5], [7.12, -41.16, 9.78, -42.42, 0.5]],
+};
+
+/* Chmury: klebiaste bryly o plaskiej podstawie. Kazda to zestaw elips
+   o wspolnym wypelnieniu, wiec zlaczenia sa niewidoczne. */
+const OSC_CHMURY_KSZTALT = [
+  [[-13, -3, 8], [-3, -8.5, 11], [7, -6, 9], [16, -2, 6.5]],
+  [[-10, -2, 6.5], [-1, -6, 9], [8, -3, 7]],
+  [[-16, -2, 7], [-6, -7, 10], [4, -9, 11], [15, -4, 8], [23, -1, 5.5]],
+  [[-11, -2, 7], [-2, -7.5, 10], [8, -4, 7.5]],
+];
 
 const OSC_P0 = { x: 28, y: 118 };
 const OSC_P1 = { x: 200, y: -26 };
@@ -649,13 +675,34 @@ class OgrodSwiatlaCard extends HTMLElement {
       return e;
     };
 
-    this._chmury = [[48, 28, 1.0, 62], [150, 46, 0.72, 82], [258, 24, 1.12, 50],
-      [338, 54, 0.82, 71]].map(([x, y, skala, czas], i) => {
-      const g = el('g', { class: 'chmura', transform: 'translate(' + x + ',' + y + ') scale(' + skala + ')' });
+    /* Chmury: cien pod spodem, biala bryla, podswietlenie od gory. */
+    this._chmury = [[52, 30, 0.85, 64], [158, 48, 0.62, 86], [262, 26, 0.95, 52],
+      [340, 54, 0.7, 73]].map(([x, y, skala, czas], i) => {
+      const g = el('g', { class: 'chmura',
+        transform: 'translate(' + x + ',' + y + ') scale(' + skala + ')' });
       g.style.animationDuration = czas + 's';
       g.style.animationDelay = (-i * czas / 4).toFixed(1) + 's';
-      [[0, 0, 15], [16, 4, 12], [-15, 5, 11], [6, -7, 11]].forEach(([cx, cy, r]) =>
-        g.appendChild(el('ellipse', { cx, cy, rx: r, ry: (r * 0.62).toFixed(1), fill: '#fff' })));
+
+      const bryly = OSC_CHMURY_KSZTALT[i % OSC_CHMURY_KSZTALT.length];
+      const lewa = Math.min.apply(null, bryly.map(([bx, , r]) => bx - r));
+      const prawa = Math.max.apply(null, bryly.map(([bx, , r]) => bx + r));
+      const cien = el('g', { fill: '#c6d4e6' });
+      const bryla = el('g', { fill: '#ffffff' });
+      const swiatlo = el('g', { fill: '#ffffff', 'fill-opacity': '.8' });
+
+      bryly.forEach(([cx, cy, r]) => {
+        cien.appendChild(el('ellipse', { cx, cy: cy + 1.6, rx: r, ry: (r * 0.82).toFixed(2) }));
+        bryla.appendChild(el('ellipse', { cx, cy, rx: r, ry: (r * 0.82).toFixed(2) }));
+      });
+      cien.appendChild(el('rect', { x: lewa, y: -3.4, width: prawa - lewa, height: 7, rx: 3.5 }));
+      bryla.appendChild(el('rect', { x: lewa, y: -4.6, width: prawa - lewa, height: 7, rx: 3.5 }));
+      bryly.slice(0, 2).forEach(([cx, cy, r]) =>
+        swiatlo.appendChild(el('ellipse', { cx: (cx - r * 0.2).toFixed(2),
+          cy: (cy - r * 0.26).toFixed(2), rx: (r * 0.6).toFixed(2), ry: (r * 0.45).toFixed(2) })));
+
+      g.appendChild(cien);
+      g.appendChild(bryla);
+      g.appendChild(swiatlo);
       this._el.chmury.appendChild(g);
       return g;
     });
@@ -682,21 +729,36 @@ class OgrodSwiatlaCard extends HTMLElement {
       this._platki.push(c);
     }
 
-    this._drzewa = [[30, false], [370, true]].map(([x, lustro], i) => {
-      const kotwica = el('g', { transform: 'translate(' + x + ',120)' + (lustro ? ' scale(-1,1)' : '') });
+    const K = OSC_KSZTALTY;
+    this._drzewa = [[32, 1, 0], [368, -1, 1]].map(([x, zwrot, i]) => {
+      const kotwica = el('g', { transform: 'translate(' + x + ',120) scale(' + zwrot + ',1)' });
       const d = el('g', { class: 'drzewo' });
-      d.appendChild(el('path', { class: 'pien', d: 'M0 0 L0 -20', stroke: '#4a3a29',
-        'stroke-width': 4, 'stroke-linecap': 'round', fill: 'none' }));
+
+      /* Konary wychodza spod korony, wiec rysujemy je pod nia. */
+      d.appendChild(el('path', { d: K.konarL, stroke: '#4a3a29', 'stroke-width': 1.5,
+        fill: 'none', 'stroke-linecap': 'round' }));
+      d.appendChild(el('path', { d: K.konarP, stroke: '#4a3a29', 'stroke-width': 1.3,
+        fill: 'none', 'stroke-linecap': 'round' }));
+
       const lisc = el('g', { class: 'lisc' });
-      [[0, -30, 13], [-9, -24, 10], [9, -25, 10], [0, -38, 9]].forEach(([cx, cy, r]) =>
-        lisc.appendChild(el('circle', { cx, cy, r, fill: '#2f6b33' })));
+      lisc.appendChild(el('path', { d: K.pienLisciasty, fill: '#4a3a29' }));
+      const kor = el('g', { transform: 'translate(0,-31)' });
+      kor.appendChild(el('path', { d: K.koronaDuza, fill: '#27582c' }));
+      kor.appendChild(el('path', { d: K.koronaSrednia, fill: '#357440', transform: 'translate(-4,1)' }));
+      kor.appendChild(el('path', { d: K.koronaSrednia, fill: '#2d6535', transform: 'translate(5,3) scale(.9)' }));
+      kor.appendChild(el('path', { d: K.koronaMala, fill: '#468f4c', transform: 'translate(-3,-6)' }));
+      kor.appendChild(el('path', { d: K.koronaMala, fill: '#4f9c55', transform: 'translate(4,-7) scale(.75)' }));
+      lisc.appendChild(kor);
       d.appendChild(lisc);
-      const golo = el('g', { class: 'golo', stroke: '#5a4633', 'stroke-width': 1.8,
-        'stroke-linecap': 'round', fill: 'none' });
-      ['M0 -20 L-9 -33', 'M0 -20 L9 -31', 'M0 -26 L-5 -39', 'M0 -26 L6 -38', 'M0 -20 L0 -36']
-        .forEach((dd) => golo.appendChild(el('path', { d: dd })));
+
+      const golo = el('g', { class: 'golo' });
+      K.galezie.forEach(([x1, y1, x2, y2, w]) =>
+        golo.appendChild(el('line', { x1, y1, x2, y2, stroke: '#5b4733',
+          'stroke-width': w, 'stroke-linecap': 'round' })));
+      golo.appendChild(el('path', { d: K.pienZimowy, fill: '#4a3a29' }));
       d.appendChild(golo);
-      d.style.animationDelay = (i * -0.6) + 's';
+
+      d.style.animationDelay = (i * -0.7) + 's';
       kotwica.appendChild(d);
       this._el.drzewa.appendChild(kotwica);
       return { d, lisc, golo };
