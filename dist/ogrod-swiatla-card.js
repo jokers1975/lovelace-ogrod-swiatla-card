@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '2.2.0';
+const OSC_WERSJA = '2.3.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
