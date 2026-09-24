@@ -1,7 +1,4 @@
-<p align="center">
-  <img src="docs/baner.webp" width="100%"
-       alt="Zachod slonca na karcie: slonce tuz nad horyzontem, drzewa po bokach, chmura i pierwsze gwiazdy">
-</p>
+![Zachod slonca na karcie: slonce tuz nad horyzontem, drzewa po bokach, chmura i pierwsze gwiazdy](https://raw.githubusercontent.com/jokers1975/lovelace-ogrod-swiatla-card/main/docs/baner.webp)
 
 # Oświetlenie ogrodu · Garden Lights Card
 
@@ -15,17 +12,11 @@ sunset, with an animated sky and live weather.*
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 ![licencja](https://img.shields.io/badge/licencja%20%C2%B7%20license-MIT-blue)
 
-<p align="center">
-  <img src="docs/karta.webp" width="380"
-       alt="Karta w calosci: niebo o zachodzie ze sloncem i ksiezycem naraz, godziny wschodu i zachodu, regulacja przesuniec oraz zdjecie ogrodu z punktami swietlnymi">
-</p>
+![Karta w calosci: niebo o zachodzie ze sloncem i ksiezycem naraz, godziny wschodu i zachodu, regulacja przesuniec oraz zdjecie ogrodu z punktami swietlnymi](https://raw.githubusercontent.com/jokers1975/lovelace-ogrod-swiatla-card/main/docs/karta.webp)
 
-<p align="center"><em>
-Słońce tuż nad horyzontem i księżyc widoczny jednocześnie — tak wygląda niebo
-na karcie o zachodzie.<br>
-The sun just above the horizon with the moon visible at the same time — the
-card's sky at sunset.
-</em></p>
+*Słońce tuż nad horyzontem i księżyc widoczny jednocześnie — tak wygląda
+niebo na karcie o zachodzie. The sun just above the horizon with the moon
+visible at the same time.*
 
 **[Polski](#polski) · [English](#english)**
 
@@ -131,7 +122,7 @@ dostawiając drzewa albo zmieniając kształt dachu.
 
 | zrzut prosto z Geoportalu | po poprawie narzędziem AI |
 |---|---|
-| ![zrzut z Geoportalu bez żadnych warstw](docs/geoportal-surowe.webp) | ![to samo zdjęcie po poprawie jakości](docs/geoportal-ai.webp) |
+| ![zrzut z Geoportalu bez żadnych warstw](https://raw.githubusercontent.com/jokers1975/lovelace-ogrod-swiatla-card/main/docs/geoportal-surowe.webp) | ![to samo zdjęcie po poprawie jakości](https://raw.githubusercontent.com/jokers1975/lovelace-ogrod-swiatla-card/main/docs/geoportal-ai.webp) |
 
 Pamiętaj, że takie narzędzia **dorysowują** detal, którego w oryginale nie było.
 Geometria zwykle zostaje nienaruszona, ale drobne tekstury są zmyślone. Do tła
@@ -412,7 +403,7 @@ adding trees or reshaping roofs.
 
 | straight from Geoportal | after AI enhancement |
 |---|---|
-| ![raw geoportal screenshot with all overlays off](docs/geoportal-surowe.webp) | ![the same image after quality enhancement](docs/geoportal-ai.webp) |
+| ![raw geoportal screenshot with all overlays off](https://raw.githubusercontent.com/jokers1975/lovelace-ogrod-swiatla-card/main/docs/geoportal-surowe.webp) | ![the same image after quality enhancement](https://raw.githubusercontent.com/jokers1975/lovelace-ogrod-swiatla-card/main/docs/geoportal-ai.webp) |
 
 Keep in mind that such tools **invent** detail that was never in the original.
 Geometry usually survives intact, but fine textures are fabricated. That is
