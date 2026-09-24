@@ -3,7 +3,7 @@
 Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
 względem wschodu i zachodu słońca.
 
-![wersja](https://img.shields.io/badge/wersja-1.4.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja-1.5.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 
 ## Co robi
@@ -68,6 +68,21 @@ w Polsce Geoportal GUGiK udostępnia zdjęcia w rozdzielczości rzędu 5 cm na
 piksel, czyli znacznie dokładniejsze niż popularne mapy internetowe.
 Kadr najlepiej obrócić tak, żeby ulica była na dole, a głąb ogrodu na górze.
 
+## Barwa zapalenia
+
+Gdy przypiszesz do punktu źródło światła obsługujące kolor, edytor sam
+zaproponuje **wybór barwy** — rozpoznaje to po `supported_color_modes`.
+Lampy pozwalające regulować tylko biel dostają zamiast tego pole
+**temperatury barwowej w kelwinach**. Zwykłe lampy i gniazdka nie dostają nic.
+
+Po ustawieniu barwy kliknięcie punktu zapala lampę przez `light.turn_on`
+z `rgb_color` albo `color_temp_kelvin`, więc światło zawsze wstaje w tym
+samym kolorze, a nie w tym, co akurat pamiętało. Przycisk *Bez wymuszania*
+wraca do zwykłego przełączania.
+
+Poświata punktu przyjmuje **barwę, którą lampa faktycznie świeci**
+(z atrybutu `rgb_color`), a gdy lampa jej nie podaje — barwę z konfiguracji.
+
 ## Rozmieszczanie lamp
 
 W edytorze karty:
@@ -109,6 +124,9 @@ points:
 | `dim_max` | `0.5` | maksymalne nocne przyciemnienie tła, `0` = brak, `1` = czerń |
 | `automation_entity` | — | automatyzacja karty; włączana przy rozwiązywaniu konfliktu |
 | `points` | `[]` | lista punktów świetlnych z przypisanymi encjami |
+
+Każdy punkt przyjmuje `entity`, `x`, `y` oraz opcjonalnie `color` (zapis `#rrggbb`)
+albo `color_temp_kelvin`.
 
 Punkt przyjmuje encje z domen `light` i `switch`; kliknięcie wywołuje
 `homeassistant.toggle`.

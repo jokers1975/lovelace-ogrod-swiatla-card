@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '1.4.0';
+const OSC_WERSJA = '1.5.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -42,6 +42,24 @@ const oscBezier = (t, p0, p1, p2) => {
     y: u * u * p0.y + 2 * u * t * p1.y + t * t * p2.y,
   };
 };
+
+/* Tryby swiatla, w ktorych da sie ustawic barwe, oraz zamiana hex <-> rgb. */
+const OSC_TRYBY_KOLORU = ['hs', 'rgb', 'rgbw', 'rgbww', 'rgbwww', 'xy'];
+
+const oscTryby = (st) => (st && st.attributes && st.attributes.supported_color_modes) || [];
+const oscObslugujeKolor = (st) => oscTryby(st).some((m) => OSC_TRYBY_KOLORU.includes(m));
+const oscObslugujeTemp = (st) => oscTryby(st).includes('color_temp');
+
+const oscHexNaRgb = (hex) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+const oscRgbNaHex = (rgb) => Array.isArray(rgb) && rgb.length >= 3
+  ? '#' + rgb.slice(0, 3).map((v) => Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16).padStart(2, '0')).join('')
+  : null;
 
 const OSC_P0 = { x: 28, y: 118 };
 const OSC_P1 = { x: 200, y: -26 };
@@ -248,8 +266,18 @@ class OgrodSwiatlaCard extends HTMLElement {
           display: flex; align-items: center; justify-content: center;
         }
         .punkt .rdzen { width: 8px; height: 8px; border-radius: 50%; background: #ddd; }
-        .punkt.swieci { background: rgba(255,214,102,.35); box-shadow: 0 0 16px 6px rgba(255,208,80,.75); }
-        .punkt.swieci .rdzen { background: #fff3c4; }
+        /* Najpierw wartosci awaryjne: starsze przegladarki nie znaja color-mix
+           i pomijaja nastepne deklaracje, zamiast gubic poswiate. */
+        .punkt.swieci {
+          background: rgba(255,214,102,.35);
+          box-shadow: 0 0 16px 6px rgba(255,208,80,.75);
+          background: color-mix(in srgb, var(--osc-kolor, #ffd050) 35%, transparent);
+          box-shadow: 0 0 16px 6px color-mix(in srgb, var(--osc-kolor, #ffd050) 75%, transparent);
+        }
+        .punkt.swieci .rdzen {
+          background: #fff3c4;
+          background: color-mix(in srgb, var(--osc-kolor, #ffd050) 45%, #fff);
+        }
         .punkt.brak-encji { border-style: dashed; border-color: var(--error-color, #d33); }
         .punkt .etykieta {
           position: absolute; top: 28px; left: 50%; transform: translateX(-50%);
@@ -439,6 +467,18 @@ class OgrodSwiatlaCard extends HTMLElement {
       d.addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (!p.entity || !this._hass) return;
+        const st = this._hass.states[p.entity];
+        const swieci = st && st.state === 'on';
+        const barwa = oscHexNaRgb(p.color);
+        /* Zapalenie lampy z zadana barwa; gaszenie i lampy bez barwy
+           obsluguje zwykle przelaczenie. */
+        if (!swieci && p.entity.startsWith('light.') && (barwa || p.color_temp_kelvin)) {
+          const dane = { entity_id: p.entity };
+          if (barwa) dane.rgb_color = barwa;
+          else dane.color_temp_kelvin = Number(p.color_temp_kelvin);
+          this._hass.callService('light', 'turn_on', dane);
+          return;
+        }
         this._hass.callService('homeassistant', 'toggle', { entity_id: p.entity });
       });
       mapa.appendChild(d);
@@ -698,6 +738,12 @@ class OgrodSwiatlaCard extends HTMLElement {
       const st = p.entity && this._hass.states[p.entity];
       d.classList.toggle('brak-encji', !st);
       d.classList.toggle('swieci', !!st && st.state === 'on');
+      /* Poswiata przyjmuje barwe, ktora lampa faktycznie swieci,
+         a gdy jej nie podaje - barwe z konfiguracji punktu. */
+      const barwa = (st && st.attributes && oscRgbNaHex(st.attributes.rgb_color))
+        || p.color || null;
+      if (barwa) d.style.setProperty('--osc-kolor', barwa);
+      else d.style.removeProperty('--osc-kolor');
       const nazwa = p.name
         || (st && st.attributes.friendly_name)
         || p.entity
@@ -830,6 +876,56 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     }
   }
 
+  /*
+   * Panel zaznaczonego punktu. Gdy encja jest zrodlem swiatla obslugujacym
+   * barwe, dochodzi wybor koloru; gdy tylko biel regulowana - temperatura.
+   */
+  _panelPunktu(i, punkt, opcje) {
+    const st = punkt.entity ? this._hass.states[punkt.entity] : null;
+    const kolorowa = st && punkt.entity.startsWith('light.') && oscObslugujeKolor(st);
+    const bialaReg = st && punkt.entity.startsWith('light.')
+      && !kolorowa && oscObslugujeTemp(st);
+
+    let barwa = '';
+    if (kolorowa) {
+      const domyslny = punkt.color
+        || (st.attributes && oscRgbNaHex(st.attributes.rgb_color))
+        || '#ffd07a';
+      barwa = `
+        <div class="osc-barwa">
+          <label>Barwa zapalenia
+            <input type="color" data-rola="kolor" value="${oscEsc(domyslny)}">
+          </label>
+          <button type="button" data-rola="kolor-czysc">Bez wymuszania</button>
+          <span>${punkt.color
+            ? 'Karta zapali te lampe w tej barwie.'
+            : 'Ta lampa obsluguje kolor. Wybierz barwe, jesli chcesz, zeby'
+              + ' karta zapalala ja zawsze tak samo.'}</span>
+        </div>`;
+    } else if (bialaReg) {
+      barwa = `
+        <div class="osc-barwa">
+          <label>Temperatura barwowa (K)
+            <input type="text" data-rola="kelwiny"
+                   value="${oscEsc(punkt.color_temp_kelvin || '')}"
+                   placeholder="np. 2700">
+          </label>
+          <button type="button" data-rola="kolor-czysc">Bez wymuszania</button>
+          <span>Ta lampa pozwala regulowac biel.</span>
+        </div>`;
+    }
+
+    return `
+      <div class="osc-panel">
+        <div class="osc-panel-rzad">
+          <b>Punkt ${i + 1}</b>
+          <select data-rola="encja-wybrany">${opcje(punkt.entity)}</select>
+          <button type="button" class="usun" data-rola="usun-wybrany">Usun punkt</button>
+        </div>
+        ${barwa}
+      </div>`;
+  }
+
   _render() {
     if (!this._config || !this._hass) return;
     const cfg = this._config;
@@ -902,9 +998,23 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
         .osc-pkt.wybrany { background: #03a9f4; color: #fff;
                            box-shadow: 0 0 0 4px rgba(3,169,244,.35); }
         .osc-pkt.pusty { border-style: dashed; }
-        .osc-panel { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+        .osc-panel { display: grid; gap: 10px;
                      background: var(--secondary-background-color);
                      border-radius: 10px; padding: 10px; margin-top: 10px; }
+        .osc-panel-rzad { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .osc-barwa { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+                     border-top: 1px solid var(--divider-color); padding-top: 10px; }
+        .osc-barwa label { flex: none; }
+        .osc-barwa input[type=color] { width: 54px; height: 32px; padding: 2px;
+                                       border: 1px solid var(--divider-color);
+                                       border-radius: 8px; background: none; cursor: pointer; }
+        .osc-barwa input[type=text] { width: 90px; }
+        .osc-barwa button { border: none; border-radius: 8px; padding: 7px 10px;
+                            cursor: pointer; font-size: .78rem;
+                            background: var(--card-background-color);
+                            color: var(--primary-text-color); }
+        .osc-barwa span { flex: 1; min-width: 150px; font-size: .76rem;
+                          color: var(--secondary-text-color); line-height: 1.35; }
         .osc-panel b { font-size: .85rem; }
         .osc-panel select { flex: 1; min-width: 150px; padding: 6px; border-radius: 8px;
                             border: 1px solid var(--divider-color);
@@ -973,13 +1083,7 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                  ).join('')}
                </div>`
             : '<div class="osc-brak" style="margin-top:10px">Najpierw dodaj zdjecie w kroku 1.</div>'}
-          ${wybranyPunkt
-            ? `<div class="osc-panel">
-                 <b>Punkt ${w + 1}</b>
-                 <select data-rola="encja-wybrany">${opcje(wybranyPunkt.entity)}</select>
-                 <button type="button" class="usun" data-rola="usun-wybrany">Usun punkt</button>
-               </div>`
-            : ''}
+          ${wybranyPunkt ? this._panelPunktu(w, wybranyPunkt, opcje) : ''}
           <div class="osc-lista">
             ${punkty.map((p, i) => `
                 <div class="osc-wiersz${i === w ? ' wybrany' : ''}" data-idx="${i}">
@@ -1083,6 +1187,28 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       else if (this._wybrany > i) this._wybrany -= 1;
       this._ustaw({ points: nowe }, true);
     };
+
+    const zmienPunkt = (i, zmiany) => {
+      const nowe = this._config.points.slice();
+      nowe[i] = { ...nowe[i], ...zmiany };
+      if (nowe[i].color === undefined) delete nowe[i].color;
+      if (nowe[i].color_temp_kelvin === undefined) delete nowe[i].color_temp_kelvin;
+      this._ustaw({ points: nowe }, true);
+    };
+    const inpKolor = this.querySelector('input[data-rola="kolor"]');
+    if (inpKolor) inpKolor.addEventListener('change', () =>
+      zmienPunkt(w, { color: inpKolor.value, color_temp_kelvin: undefined }));
+    const inpKelwiny = this.querySelector('input[data-rola="kelwiny"]');
+    if (inpKelwiny) inpKelwiny.addEventListener('change', () => {
+      const k = parseInt(inpKelwiny.value, 10);
+      zmienPunkt(w, {
+        color_temp_kelvin: Number.isFinite(k) && k > 0 ? k : undefined,
+        color: undefined,
+      });
+    });
+    const btnCzysc = this.querySelector('button[data-rola="kolor-czysc"]');
+    if (btnCzysc) btnCzysc.addEventListener('click', () =>
+      zmienPunkt(w, { color: undefined, color_temp_kelvin: undefined }));
 
     const selWybrany = this.querySelector('select[data-rola="encja-wybrany"]');
     if (selWybrany) selWybrany.addEventListener('change', () => zmienEncje(w, selWybrany.value));
