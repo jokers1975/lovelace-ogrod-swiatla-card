@@ -3,7 +3,7 @@
 Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
 względem wschodu i zachodu słońca.
 
-![wersja](https://img.shields.io/badge/wersja-1.2.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja-1.3.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 
 ## Co robi
@@ -21,6 +21,19 @@ lamp pozostaje czytelna także po zmroku.
 **Offsety wschodu i zachodu.** O ile minut przed lub po zachodzie włączyć
 i przed lub po wschodzie wyłączyć oświetlenie. Karta zapisuje je do encji
 `input_number`, dzięki czemu czyta je zwykła automatyzacja Home Assistanta.
+
+## Konfiguracja bez YAML-a
+
+Edytor karty prowadzi przez trzy kroki i sam pokazuje, czego jeszcze brakuje:
+
+1. **Zdjęcie ogrodu** — przycisk *Wgraj zdjęcie* wysyła plik do magazynu obrazów
+   Home Assistanta. Nie trzeba niczego kopiować do `/config/www`.
+2. **Lampy** — rozmieszczasz je klikając w zdjęcie.
+3. **Sterowanie słońcem** — przycisk *Utwórz helpery* zakłada oba `input_number`
+   z właściwym zakresem i jednostką, po czym wpisuje je do konfiguracji karty.
+
+Sekcja *Ustawienia zaawansowane* pozwala podmienić encję słońca albo wskazać
+własne helpery, jeśli już je masz.
 
 ## Instalacja przez HACS
 
@@ -86,7 +99,10 @@ points:
 Punkt przyjmuje encje z domen `light` i `switch`; kliknięcie wywołuje
 `homeassistant.toggle`.
 
-## Wymagane helpery
+## Helpery offsetów
+
+Najprościej utworzyć je przyciskiem w kroku 3 edytora. Odpowiednik w YAML-u,
+gdyby ktoś wolał ręcznie:
 
 ```yaml
 input_number:

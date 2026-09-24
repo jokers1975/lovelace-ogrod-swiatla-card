@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '1.2.0';
+const OSC_WERSJA = '1.3.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -491,6 +491,18 @@ class OgrodSwiatlaCard extends HTMLElement {
 
 /* ---------------------------------------------------------------- EDYTOR */
 
+/* Definicje helperow offsetu tworzonych na zadanie z kreatora. */
+const OSC_HELPERY = {
+  offset_zachod_entity: {
+    name: 'Ogrod - wlacz wzgledem zachodu',
+    icon: 'mdi:weather-sunset-down',
+  },
+  offset_wschod_entity: {
+    name: 'Ogrod - wylacz wzgledem wschodu',
+    icon: 'mdi:weather-sunset-up',
+  },
+};
+
 class OgrodSwiatlaCardEditor extends HTMLElement {
   setConfig(config) {
     this._config = { points: [], ...config };
@@ -524,14 +536,18 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       .sort();
   }
 
+  _istnieje(encja) {
+    return !!(encja && this._hass && this._hass.states[encja]);
+  }
+
   /*
    * Wysylka zdjecia przez wbudowane API obrazow Home Assistanta.
-   * Plik ladzie w magazynie HA, a karta dostaje trwaly adres
-   * /api/image/serve/<id>/original - nie trzeba niczego kopiowac do /config/www.
+   * Plik ladzie w magazynie HA i dostaje trwaly adres
+   * /api/image/serve/<id>/original - nic nie trzeba kopiowac do /config/www.
    */
   async _wgrajZdjecie(plik) {
     if (!plik) return;
-    const stan = this.querySelector('.osc-stan-wysylki');
+    const stan = this.querySelector('.osc-stan-zdjecie');
     if (!this._hass || typeof this._hass.fetchWithAuth !== 'function') {
       if (stan) stan.textContent = 'Ta wersja Home Assistanta nie udostepnia wysylki obrazow. '
         + 'Skopiuj plik do /config/www i podaj sciezke /local/nazwa.jpg.';
@@ -548,6 +564,50 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       this._ustaw({ image: '/api/image/serve/' + wynik.id + '/original' }, true);
     } catch (e) {
       if (stan) stan.textContent = 'Nie udalo sie wyslac: ' + e.message;
+    }
+  }
+
+  /*
+   * Tworzenie brakujacych input_number przez API Home Assistanta.
+   * Encji nie da sie przewidziec z nazwy, wiec po utworzeniu szukamy jej
+   * w stanach po nazwie przyjaznej.
+   */
+  async _utworzHelpery() {
+    const stan = this.querySelector('.osc-stan-helpery');
+    if (!this._hass || typeof this._hass.callWS !== 'function') {
+      if (stan) stan.textContent = 'Brak dostepu do API - dodaj helpery recznie.';
+      return;
+    }
+    if (stan) stan.textContent = 'Tworzenie...';
+    const zmiany = {};
+    try {
+      for (const [klucz, def] of Object.entries(OSC_HELPERY)) {
+        if (this._istnieje(this._config[klucz])) continue;
+        await this._hass.callWS({
+          type: 'input_number/create',
+          name: def.name,
+          icon: def.icon,
+          min: -120,
+          max: 120,
+          step: 5,
+          mode: 'box',
+          unit_of_measurement: 'min',
+        });
+        let encja = null;
+        for (let i = 0; i < 25 && !encja; i++) {
+          await new Promise((r) => setTimeout(r, 150));
+          encja = Object.keys(this._hass.states).find((e) =>
+            e.startsWith('input_number.') &&
+            this._hass.states[e].attributes.friendly_name === def.name);
+        }
+        if (!encja) throw new Error('utworzono, ale nie odnaleziono encji ' + def.name);
+        zmiany[klucz] = encja;
+      }
+      if (stan) stan.textContent = 'Gotowe.';
+      if (Object.keys(zmiany).length) this._ustaw(zmiany, true);
+      else this._render();
+    } catch (e) {
+      if (stan) stan.textContent = 'Nie udalo sie utworzyc: ' + e.message;
     }
   }
 
@@ -570,23 +630,47 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     const w = this._wybrany;
     const wybranyPunkt = w === undefined ? null : punkty[w];
 
+    const przypisane = punkty.filter((p) => p.entity).length;
+    const helperyOk = this._istnieje(cfg.offset_zachod_entity)
+      && this._istnieje(cfg.offset_wschod_entity);
+    const znacznik = (ok) => ok
+      ? '<span class="osc-ok">gotowe</span>'
+      : '<span class="osc-todo">do zrobienia</span>';
+
     this.innerHTML = `
       <style>
-        .osc-ed { display: grid; gap: 12px; padding: 4px 0; }
+        .osc-ed { display: grid; gap: 14px; padding: 4px 0; }
         .osc-ed label { display: grid; gap: 4px; font-size: .85rem; }
         .osc-ed input[type=text] {
           padding: 8px; border-radius: 8px; border: 1px solid var(--divider-color);
           background: var(--card-background-color); color: var(--primary-text-color);
         }
-        .osc-wgraj {
-          display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-          background: var(--secondary-background-color); border-radius: 10px; padding: 10px;
+        .osc-krok { border: 1px solid var(--divider-color); border-radius: 12px; padding: 12px; }
+        .osc-krok > h4 {
+          margin: 0 0 10px; font-size: .95rem; display: flex; align-items: center; gap: 8px;
         }
-        .osc-wgraj button {
+        .osc-krok > h4 .nr {
+          width: 22px; height: 22px; border-radius: 50%; flex: none;
+          background: var(--primary-color); color: #fff; font-size: .78rem;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .osc-ok, .osc-todo {
+          margin-left: auto; font-size: .7rem; font-weight: 600; letter-spacing: .02em;
+          padding: 2px 8px; border-radius: 999px;
+        }
+        .osc-ok { background: rgba(46,125,50,.16); color: #2e7d32; }
+        .osc-todo { background: rgba(211,51,51,.14); color: var(--error-color, #d33); }
+        .osc-akcja {
+          display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+          background: var(--secondary-background-color);
+          border-radius: 10px; padding: 10px; margin-bottom: 10px;
+        }
+        .osc-akcja button {
           border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer;
           background: var(--primary-color); color: #fff; font-size: .85rem;
         }
-        .osc-stan-wysylki { font-size: .78rem; color: var(--secondary-text-color); flex: 1; }
+        .osc-akcja span { font-size: .78rem; color: var(--secondary-text-color); flex: 1;
+                          min-width: 150px; }
         .osc-plotno { position: relative; line-height: 0; border-radius: 10px; overflow: hidden;
                       border: 1px solid var(--divider-color); cursor: crosshair;
                       touch-action: none; user-select: none; }
@@ -601,15 +685,15 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
         .osc-pkt.pusty { border-style: dashed; }
         .osc-panel { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
                      background: var(--secondary-background-color);
-                     border-radius: 10px; padding: 10px; }
+                     border-radius: 10px; padding: 10px; margin-top: 10px; }
         .osc-panel b { font-size: .85rem; }
-        .osc-panel select { flex: 1; min-width: 160px; padding: 6px; border-radius: 8px;
+        .osc-panel select { flex: 1; min-width: 150px; padding: 6px; border-radius: 8px;
                             border: 1px solid var(--divider-color);
                             background: var(--card-background-color);
                             color: var(--primary-text-color); }
         .osc-panel .usun { border: none; background: var(--error-color, #d33); color: #fff;
                            border-radius: 8px; padding: 7px 12px; cursor: pointer; }
-        .osc-lista { display: grid; gap: 8px; }
+        .osc-lista { display: grid; gap: 8px; margin-top: 10px; }
         .osc-wiersz { display: flex; gap: 6px; align-items: center; padding: 3px;
                       border-radius: 8px; }
         .osc-wiersz.wybrany { background: rgba(3,169,244,.16); }
@@ -624,71 +708,97 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
         .osc-brak { padding: 22px; text-align: center; font-size: .82rem;
                     color: var(--secondary-text-color);
                     border: 1px dashed var(--divider-color); border-radius: 10px; }
+        .osc-zaawansowane summary { font-size: .82rem; cursor: pointer;
+                                    color: var(--secondary-text-color); }
+        .osc-zaawansowane[open] summary { margin-bottom: 10px; }
+        .osc-zaawansowane > div { display: grid; gap: 10px; }
       </style>
       <div class="osc-ed">
-        <label>Tytul
-          <input type="text" data-pole="title" value="${oscEsc(cfg.title || '')}">
-        </label>
 
-        <div class="osc-wgraj">
-          <button type="button" class="osc-btn-wgraj">Wgraj zdjecie</button>
-          <input type="file" accept="image/*" class="osc-plik" hidden>
-          <span class="osc-stan-wysylki">Wlasne zdjecie z lotu ptaka albo zrzut z portalu
-            geodezyjnego. Plik trafia do magazynu Home Assistanta.</span>
+        <div class="osc-krok">
+          <h4><span class="nr">1</span> Zdjecie ogrodu ${znacznik(!!cfg.image)}</h4>
+          <div class="osc-akcja">
+            <button type="button" class="osc-btn-wgraj">Wgraj zdjecie</button>
+            <input type="file" accept="image/*" class="osc-plik" hidden>
+            <span class="osc-stan-zdjecie">Wlasne zdjecie z lotu ptaka albo zrzut
+              z portalu geodezyjnego. Plik trafia do magazynu Home Assistanta.</span>
+          </div>
+          <label>Adres zdjecia
+            <input type="text" data-pole="image" value="${oscEsc(cfg.image || '')}">
+          </label>
         </div>
 
-        <label>Adres zdjecia
-          <input type="text" data-pole="image" value="${oscEsc(cfg.image || '')}">
-        </label>
-        <label>Encja slonca
-          <input type="text" data-pole="sun_entity" value="${oscEsc(cfg.sun_entity || 'sun.sun')}">
-        </label>
-        <label>Encja offsetu zachodu (wlaczenie)
-          <input type="text" data-pole="offset_zachod_entity" value="${oscEsc(cfg.offset_zachod_entity || '')}">
-        </label>
-        <label>Encja offsetu wschodu (wylaczenie)
-          <input type="text" data-pole="offset_wschod_entity" value="${oscEsc(cfg.offset_wschod_entity || '')}">
-        </label>
-        <label>Maksymalne przyciemnienie nocne (0 = brak, 1 = czern)
-          <input type="text" data-pole="dim_max" value="${oscEsc(cfg.dim_max === undefined ? 0.5 : cfg.dim_max)}">
-        </label>
-
-        <div class="osc-info">
-          Klikniecie w wolne miejsce obrazka <b>dodaje punkt</b>.
-          Przytrzymanie i przeciagniecie punktu <b>przesuwa</b> go.
-          Klikniecie w gotowy punkt <b>zaznacza</b> go &mdash; wtedy mozna przypisac
-          mu encje albo go skasowac.
-        </div>
-
-        ${cfg.image
-          ? `<div class="osc-plotno">
-               <img src="${oscEsc(cfg.image)}" alt="">
-               ${punkty.map((p, i) =>
-                 `<div class="osc-pkt${i === w ? ' wybrany' : ''}${p.entity ? '' : ' pusty'}"
-                       data-idx="${i}"
-                       style="left:${Number(p.x) || 0}%;top:${Number(p.y) || 0}%">${i + 1}</div>`
-               ).join('')}
-             </div>`
-          : '<div class="osc-brak">Wgraj zdjecie albo podaj jego adres, zeby rozmieszczac punkty.</div>'}
-
-        ${wybranyPunkt
-          ? `<div class="osc-panel">
-               <b>Punkt ${w + 1}</b>
-               <select data-rola="encja-wybrany">${opcje(wybranyPunkt.entity)}</select>
-               <button type="button" class="usun" data-rola="usun-wybrany">Usun punkt</button>
-             </div>`
-          : ''}
-
-        <div class="osc-lista">
-          ${punkty.length === 0
-            ? '<div class="osc-info">Brak punktow.</div>'
-            : punkty.map((p, i) => `
+        <div class="osc-krok">
+          <h4><span class="nr">2</span> Lampy
+            ${znacznik(punkty.length > 0 && przypisane === punkty.length)}</h4>
+          <div class="osc-info">
+            Klikniecie w wolne miejsce obrazka <b>dodaje punkt</b>.
+            Przytrzymanie i przeciagniecie punktu <b>przesuwa</b> go.
+            Klikniecie w gotowy punkt <b>zaznacza</b> go &mdash; wtedy mozna przypisac
+            mu encje albo go skasowac.
+            ${punkty.length
+              ? '<br>Punktow: ' + punkty.length + ', z przypisana encja: ' + przypisane + '.'
+              : ''}
+          </div>
+          ${cfg.image
+            ? `<div class="osc-plotno" style="margin-top:10px">
+                 <img src="${oscEsc(cfg.image)}" alt="">
+                 ${punkty.map((p, i) =>
+                   `<div class="osc-pkt${i === w ? ' wybrany' : ''}${p.entity ? '' : ' pusty'}"
+                         data-idx="${i}"
+                         style="left:${Number(p.x) || 0}%;top:${Number(p.y) || 0}%">${i + 1}</div>`
+                 ).join('')}
+               </div>`
+            : '<div class="osc-brak" style="margin-top:10px">Najpierw dodaj zdjecie w kroku 1.</div>'}
+          ${wybranyPunkt
+            ? `<div class="osc-panel">
+                 <b>Punkt ${w + 1}</b>
+                 <select data-rola="encja-wybrany">${opcje(wybranyPunkt.entity)}</select>
+                 <button type="button" class="usun" data-rola="usun-wybrany">Usun punkt</button>
+               </div>`
+            : ''}
+          <div class="osc-lista">
+            ${punkty.map((p, i) => `
                 <div class="osc-wiersz${i === w ? ' wybrany' : ''}" data-idx="${i}">
                   <span class="nr">${i + 1}</span>
                   <select data-rola="encja">${opcje(p.entity)}</select>
                   <button type="button" data-rola="usun" title="usun punkt">&#10005;</button>
                 </div>`).join('')}
+          </div>
         </div>
+
+        <div class="osc-krok">
+          <h4><span class="nr">3</span> Sterowanie sloncem ${znacznik(helperyOk)}</h4>
+          ${helperyOk
+            ? '<div class="osc-info">Helpery offsetow sa podlaczone. Wartosci ustawisz'
+              + ' juz na samej karcie.</div>'
+            : `<div class="osc-akcja">
+                 <button type="button" class="osc-btn-helpery">Utworz helpery</button>
+                 <span class="osc-stan-helpery">Karta potrzebuje dwoch encji input_number
+                   na przesuniecia wzgledem zachodu i wschodu. Moge je zalozyc automatycznie.</span>
+               </div>`}
+          <label>Maksymalne przyciemnienie nocne (0 = brak, 1 = czern)
+            <input type="text" data-pole="dim_max" value="${oscEsc(cfg.dim_max === undefined ? 0.5 : cfg.dim_max)}">
+          </label>
+        </div>
+
+        <details class="osc-zaawansowane osc-krok">
+          <summary>Ustawienia zaawansowane</summary>
+          <div>
+            <label>Tytul
+              <input type="text" data-pole="title" value="${oscEsc(cfg.title || '')}">
+            </label>
+            <label>Encja slonca
+              <input type="text" data-pole="sun_entity" value="${oscEsc(cfg.sun_entity || 'sun.sun')}">
+            </label>
+            <label>Encja offsetu zachodu (wlaczenie)
+              <input type="text" data-pole="offset_zachod_entity" value="${oscEsc(cfg.offset_zachod_entity || '')}">
+            </label>
+            <label>Encja offsetu wschodu (wylaczenie)
+              <input type="text" data-pole="offset_wschod_entity" value="${oscEsc(cfg.offset_wschod_entity || '')}">
+            </label>
+          </div>
+        </details>
       </div>
     `;
 
@@ -705,6 +815,9 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     const plik = this.querySelector('.osc-plik');
     this.querySelector('.osc-btn-wgraj').addEventListener('click', () => plik.click());
     plik.addEventListener('change', () => this._wgrajZdjecie(plik.files && plik.files[0]));
+
+    const btnHelpery = this.querySelector('.osc-btn-helpery');
+    if (btnHelpery) btnHelpery.addEventListener('click', () => this._utworzHelpery());
 
     const zmienEncje = (i, wartosc) => {
       const nowe = this._config.points.slice();
@@ -738,8 +851,12 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
   }
 
   _podepnijPlotno(plotno) {
+    /* Zwraca null, gdy plotno nie ma jeszcze rozmiaru (obrazek sie doczytuje
+       albo element zostal odlaczony po przerysowaniu). Bez tego dzielenie
+       przez zero wrzucaloby punkt w naroznik. */
     const wzgledne = (ev) => {
       const r = plotno.getBoundingClientRect();
+      if (!r.width || !r.height) return null;
       return {
         x: oscZacisk(((ev.clientX - r.left) / r.width) * 100, 0, 100),
         y: oscZacisk(((ev.clientY - r.top) / r.height) * 100, 0, 100),
@@ -750,7 +867,9 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     plotno.addEventListener('click', (ev) => {
       if (this._przeciagano) { this._przeciagano = false; return; }
       if (ev.target.closest('.osc-pkt')) return;
-      const { x, y } = wzgledne(ev);
+      const poz = wzgledne(ev);
+      if (!poz) return;
+      const { x, y } = poz;
       const nowe = [...(this._config.points || []), { entity: '', x: +x.toFixed(2), y: +y.toFixed(2) }];
       this._wybrany = nowe.length - 1;
       this._ustaw({ points: nowe }, true);
@@ -769,8 +888,10 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
         const ruch = (e2) => {
           if (!ruszono &&
               Math.abs(e2.clientX - start.x) < 4 && Math.abs(e2.clientY - start.y) < 4) return;
+          const poz = wzgledne(e2);
+          if (!poz) return;
           ruszono = true;
-          const { x, y } = wzgledne(e2);
+          const { x, y } = poz;
           d.style.left = x + '%';
           d.style.top = y + '%';
           d.dataset.x = x.toFixed(2);
@@ -781,7 +902,6 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
           d.removeEventListener('pointerup', koniec);
           d.removeEventListener('pointercancel', koniec);
           if (!ruszono) {
-            /* Zwykle klikniecie w punkt: zaznaczenie go. */
             this._wybrany = (this._wybrany === i) ? undefined : i;
             this._render();
             return;
