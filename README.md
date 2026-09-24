@@ -14,9 +14,16 @@ property, decide how many minutes before sunset they should come on and after
 sunrise go off, and the card makes sure this does not clash with automations
 you already have.*
 
-![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-2.4.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-2.5.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 ![licencja](https://img.shields.io/badge/licencja%20%C2%B7%20license-MIT-blue)
+
+[![Postaw mi kawę · Buy me a coffee](https://img.shields.io/badge/Postaw%20mi%20kaw%C4%99%20%C2%B7%20Buy%20me%20a%20coffee-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/jokers1975)
+
+Karta jest darmowa i zostanie darmowa. Jeśli oszczędziła Ci wieczoru,
+możesz postawić kawę — wystarczy kliknąć powyżej.
+*The card is free and will stay free. If it saved you an evening, you can buy
+me a coffee — just click above.*
 
 **[Polski](#polski) · [English](#english)**
 
