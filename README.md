@@ -3,7 +3,7 @@
 Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
 względem wschodu i zachodu słońca.
 
-![wersja](https://img.shields.io/badge/wersja-1.7.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja-1.8.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 
 ## Co robi
@@ -28,6 +28,29 @@ bez żadnej dodatkowej encji. Terminator to półelipsa o poziomej półosi
 znów równa, ale z drugiej strony. Sierp przybywający jest oświetlony po prawej,
 ubywający po lewej — zgodnie z widokiem z półkuli północnej. Nazwa fazy trafia
 do podtytułu karty.
+
+**Pogoda na niebie.** Po wskazaniu encji pogody (pole nieobowiązkowe) niebo
+zaczyna odwzorowywać to, co za oknem:
+
+| co w encji | co na karcie |
+|---|---|
+| zachmurzenie | od zera do czterech przepływających chmur |
+| `rainy`, `lightning-rainy` | deszcz |
+| `pouring` | ulewa, gęściej |
+| `snowy`, `hail` | śnieg |
+| `snowy-rainy` | deszcz ze śniegiem |
+
+Zachmurzenie brane jest z atrybutu `cloud_coverage`, gdy encja go podaje —
+jest dokładniejsze niż sama nazwa stanu.
+
+Po bokach stoją **drzewa**: zielone od wiosny do jesieni, zimą bez liści
+(na półkuli południowej pory roku są przesunięte). Przy wietrze od 10 km/h
+zaczynają się bujać, powyżej 30 km/h mocniej. Prędkość przeliczana jest
+z jednostki podanej przez encję — m/s, mph i węzły też działają. Stany
+`windy` i `windy-variant` wymuszają odczuwalny wiatr nawet przy niskim odczycie.
+
+Animacje respektują systemowe ustawienie ograniczenia ruchu
+(`prefers-reduced-motion`).
 
 **Plan ogrodu z punktami świetlnymi.** Kliknięcie punktu przełącza przypisaną
 encję, a świecąca lampa dostaje żółtą poświatę. Wieczorem zdjęcie przygasa
@@ -134,6 +157,7 @@ points:
 | `offset_zachod_entity` | — | `input_number` z przesunięciem włączenia |
 | `offset_wschod_entity` | — | `input_number` z przesunięciem wyłączenia |
 | `dim_max` | `0.5` | maksymalne nocne przyciemnienie tła, `0` = brak, `1` = czerń |
+| `weather_entity` | — | encja pogody; bez niej niebo zostaje czyste, a drzewa się nie pojawiają |
 | `automation_entity` | — | automatyzacja karty; włączana przy rozwiązywaniu konfliktu |
 | `points` | `[]` | lista punktów świetlnych z przypisanymi encjami |
 

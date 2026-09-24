@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '1.6.0';
+const OSC_WERSJA = '1.8.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -60,6 +60,54 @@ const oscRgbNaHex = (rgb) => Array.isArray(rgb) && rgb.length >= 3
   ? '#' + rgb.slice(0, 3).map((v) => Math.max(0, Math.min(255, Math.round(v)))
       .toString(16).padStart(2, '0')).join('')
   : null;
+
+/* Przelicznik na kilometry na godzine - encje pogody podaja rozne jednostki. */
+const OSC_WIATR_NA_KMH = {
+  'km/h': 1, 'm/s': 3.6, 'mph': 1.609344, kn: 1.852, 'ft/s': 1.09728,
+};
+
+/* Zachmurzenie w procentach, gdy encja nie poda go wprost. */
+const OSC_ZACHMURZENIE = {
+  sunny: 5, 'clear-night': 5, partlycloudy: 40, cloudy: 90, fog: 85,
+  rainy: 90, pouring: 100, snowy: 95, 'snowy-rainy': 95, hail: 95,
+  lightning: 85, 'lightning-rainy': 95, windy: 25, 'windy-variant': 60,
+  exceptional: 60,
+};
+
+/*
+ * Sprowadza encje pogody do czterech liczb, ktorymi da sie sterowac rysunkiem.
+ * Zachmurzenie bierzemy z atrybutu, jesli jest - jest dokladniejsze niz nazwa
+ * stanu. Stany windy wymuszaja odczuwalny wiatr nawet przy niskiej predkosci.
+ */
+const oscPogoda = (st) => {
+  if (!st) return null;
+  const a = st.attributes || {};
+  const stan = String(st.state || '');
+
+  let wiatr = Number(a.wind_speed);
+  wiatr = Number.isFinite(wiatr)
+    ? wiatr * (OSC_WIATR_NA_KMH[a.wind_speed_unit] || 1) : 0;
+  if (stan === 'windy' || stan === 'windy-variant') wiatr = Math.max(wiatr, 26);
+
+  let chmury = Number(a.cloud_coverage);
+  if (!Number.isFinite(chmury)) chmury = OSC_ZACHMURZENIE[stan];
+  if (!Number.isFinite(chmury)) chmury = 0;
+
+  const deszcz = stan === 'pouring' ? 2
+    : (stan === 'rainy' || stan === 'lightning-rainy') ? 1
+      : stan === 'snowy-rainy' ? 1 : 0;
+  const snieg = (stan === 'snowy' || stan === 'hail') ? 2
+    : stan === 'snowy-rainy' ? 1 : 0;
+
+  return { stan, wiatr, chmury, deszcz, snieg };
+};
+
+/* Zima to grudzien, styczen i luty; na poludniu odwrotnie. */
+const oscZima = (ts, lat) => {
+  let m = new Date(ts).getMonth();
+  if (Number.isFinite(lat) && lat < 0) m = (m + 6) % 12;
+  return m === 11 || m <= 1;
+};
 
 const OSC_P0 = { x: 28, y: 118 };
 const OSC_P1 = { x: 200, y: -26 };
@@ -191,6 +239,7 @@ class OgrodSwiatlaCard extends HTMLElement {
       offset_wschod_entity: 'input_number.ogrod_offset_wschod',
       dim_max: 0.5,
       automation_entity: '',
+      weather_entity: '',
       points: [],
     };
   }
@@ -204,6 +253,7 @@ class OgrodSwiatlaCard extends HTMLElement {
       offset_wschod_entity: 'input_number.ogrod_offset_wschod',
       dim_max: 0.5,
       automation_entity: '',
+      weather_entity: '',
       points: [],
       ...config,
     };
@@ -312,9 +362,9 @@ class OgrodSwiatlaCard extends HTMLElement {
            i pomijaja nastepne deklaracje, zamiast gubic poswiate. */
         .punkt.swieci {
           background: rgba(255,214,102,.35);
-          box-shadow: 0 0 16px 6px rgba(255,208,80,.75);
+          box-shadow: 0 0 26px 11px rgba(255,208,80,.72);
           background: color-mix(in srgb, var(--osc-kolor, #ffd050) 35%, transparent);
-          box-shadow: 0 0 16px 6px color-mix(in srgb, var(--osc-kolor, #ffd050) 75%, transparent);
+          box-shadow: 0 0 26px 11px color-mix(in srgb, var(--osc-kolor, #ffd050) 72%, transparent);
         }
         .punkt.swieci .rdzen {
           background: #fff3c4;
@@ -328,6 +378,43 @@ class OgrodSwiatlaCard extends HTMLElement {
           pointer-events: none; opacity: 0; transition: opacity .2s;
         }
         .punkt:hover .etykieta { opacity: 1; }
+
+        /* --- pogoda --- */
+        .chmury, .opady, .drzewa { pointer-events: none; }
+        @keyframes osc-chmura {
+          from { transform: translateX(-110px); }
+          to   { transform: translateX(510px); }
+        }
+        .chmura { animation-name: osc-chmura; animation-timing-function: linear;
+                  animation-iteration-count: infinite; }
+        @keyframes osc-deszcz {
+          0%   { transform: translateY(-26px); opacity: 0; }
+          12%  { opacity: .85; }
+          100% { transform: translateY(126px); opacity: .85; }
+        }
+        .kropla { animation-name: osc-deszcz; animation-timing-function: linear;
+                  animation-iteration-count: infinite; }
+        @keyframes osc-snieg {
+          0%   { transform: translate(0, -22px); opacity: 0; }
+          15%  { opacity: .95; }
+          50%  { transform: translate(7px, 52px); }
+          100% { transform: translate(-3px, 124px); opacity: .95; }
+        }
+        .platek { animation-name: osc-snieg; animation-timing-function: linear;
+                  animation-iteration-count: infinite; }
+        /* Obrot wokol podstawy pnia, a nie srodka rysunku. */
+        .drzewo { transform-box: fill-box; transform-origin: 50% 100%; }
+        @keyframes osc-wiatr {
+          0%, 100% { transform: rotate(calc(-1 * var(--osc-kat, 0deg))); }
+          50%      { transform: rotate(var(--osc-kat, 0deg)); }
+        }
+        .drzewo.buja { animation-name: osc-wiatr;
+                       animation-timing-function: ease-in-out;
+                       animation-iteration-count: infinite;
+                       animation-duration: var(--osc-czas, 3s); }
+        @media (prefers-reduced-motion: reduce) {
+          .chmura, .kropla, .platek, .drzewo.buja { animation: none; }
+        }
       </style>
       <ha-card>
         <div class="naglowek">
@@ -371,8 +458,11 @@ class OgrodSwiatlaCard extends HTMLElement {
               <circle class="ks-tarcza" r="9" fill="#2a3250"/>
               <path class="ks-swiatlo" fill="#eef2fb"/>
             </g>
+            <g class="chmury"></g>
+            <g class="opady"></g>
             <rect x="0" y="118" width="400" height="32" fill="#16351f"/>
             <path d="M0 118 L400 118" stroke="rgba(255,255,255,.35)" stroke-width="1"/>
+            <g class="drzewa"></g>
             <text class="t-wschod" x="28" y="136" font-size="10"
                   text-anchor="middle" fill="rgba(255,255,255,.85)"></text>
             <text class="t-zachod" x="372" y="136" font-size="10"
@@ -405,6 +495,9 @@ class OgrodSwiatlaCard extends HTMLElement {
       ksTarcza: this.shadowRoot.querySelector('.ks-tarcza'),
       ksSwiatlo: this.shadowRoot.querySelector('.ks-swiatlo'),
       konflikt: this.shadowRoot.querySelector('.konflikt'),
+      chmury: this.shadowRoot.querySelector('.chmury'),
+      opady: this.shadowRoot.querySelector('.opady'),
+      drzewa: this.shadowRoot.querySelector('.drzewa'),
       konfliktTytul: this.shadowRoot.querySelector('.konflikt-tytul'),
       konfliktTresc: this.shadowRoot.querySelector('.konflikt-tresc'),
       konfliktRozwiaz: this.shadowRoot.querySelector('.konflikt-rozwiaz'),
@@ -436,6 +529,7 @@ class OgrodSwiatlaCard extends HTMLElement {
     this.shadowRoot.querySelector('.konflikt-rozwiaz')
       .addEventListener('click', () => this._rozwiazKonflikt());
 
+    this._zbudujPogode();
     this._zbudujOffsety();
     this._zbudowana = true;
     this._rysujPunkty();
@@ -537,7 +631,113 @@ class OgrodSwiatlaCard extends HTMLElement {
     this._odswiezSlonce();
     this._odswiezOffsety();
     this._odswiezStanyPunktow();
+    this._odswiezPogode();
     this._sprawdzKonflikty();
+  }
+
+  /* Elementy pogody powstaja raz; pozniej tylko je pokazujemy i chowamy. */
+  _zbudujPogode() {
+    const NS = 'http://www.w3.org/2000/svg';
+    const el = (nazwa, atr) => {
+      const e = document.createElementNS(NS, nazwa);
+      Object.keys(atr).forEach((k) => e.setAttribute(k, atr[k]));
+      return e;
+    };
+
+    this._chmury = [[48, 28, 1.0, 62], [150, 46, 0.72, 82], [258, 24, 1.12, 50],
+      [338, 54, 0.82, 71]].map(([x, y, skala, czas], i) => {
+      const g = el('g', { class: 'chmura', transform: 'translate(' + x + ',' + y + ') scale(' + skala + ')' });
+      g.style.animationDuration = czas + 's';
+      g.style.animationDelay = (-i * czas / 4).toFixed(1) + 's';
+      [[0, 0, 15], [16, 4, 12], [-15, 5, 11], [6, -7, 11]].forEach(([cx, cy, r]) =>
+        g.appendChild(el('ellipse', { cx, cy, rx: r, ry: (r * 0.62).toFixed(1), fill: '#fff' })));
+      this._el.chmury.appendChild(g);
+      return g;
+    });
+
+    this._krople = [];
+    for (let i = 0; i < 18; i++) {
+      const x = 14 + ((i * 121) % 374);
+      const l = el('line', { class: 'kropla', x1: x, y1: 0, x2: x - 2, y2: 9,
+        stroke: '#bcd8f5', 'stroke-width': 1.4, 'stroke-linecap': 'round' });
+      l.style.animationDuration = (0.55 + (i % 5) * 0.11).toFixed(2) + 's';
+      l.style.animationDelay = (-(i % 7) * 0.13).toFixed(2) + 's';
+      this._el.opady.appendChild(l);
+      this._krople.push(l);
+    }
+
+    this._platki = [];
+    for (let i = 0; i < 16; i++) {
+      const x = 18 + ((i * 97) % 366);
+      const c = el('circle', { class: 'platek', cx: x, cy: 0,
+        r: (1.3 + (i % 3) * 0.5).toFixed(1), fill: '#fff' });
+      c.style.animationDuration = (2.4 + (i % 4) * 0.55).toFixed(2) + 's';
+      c.style.animationDelay = (-(i % 6) * 0.42).toFixed(2) + 's';
+      this._el.opady.appendChild(c);
+      this._platki.push(c);
+    }
+
+    this._drzewa = [[30, false], [370, true]].map(([x, lustro], i) => {
+      const kotwica = el('g', { transform: 'translate(' + x + ',120)' + (lustro ? ' scale(-1,1)' : '') });
+      const d = el('g', { class: 'drzewo' });
+      d.appendChild(el('path', { class: 'pien', d: 'M0 0 L0 -20', stroke: '#4a3a29',
+        'stroke-width': 4, 'stroke-linecap': 'round', fill: 'none' }));
+      const lisc = el('g', { class: 'lisc' });
+      [[0, -30, 13], [-9, -24, 10], [9, -25, 10], [0, -38, 9]].forEach(([cx, cy, r]) =>
+        lisc.appendChild(el('circle', { cx, cy, r, fill: '#2f6b33' })));
+      d.appendChild(lisc);
+      const golo = el('g', { class: 'golo', stroke: '#5a4633', 'stroke-width': 1.8,
+        'stroke-linecap': 'round', fill: 'none' });
+      ['M0 -20 L-9 -33', 'M0 -20 L9 -31', 'M0 -26 L-5 -39', 'M0 -26 L6 -38', 'M0 -20 L0 -36']
+        .forEach((dd) => golo.appendChild(el('path', { d: dd })));
+      d.appendChild(golo);
+      d.style.animationDelay = (i * -0.6) + 's';
+      kotwica.appendChild(d);
+      this._el.drzewa.appendChild(kotwica);
+      return { d, lisc, golo };
+    });
+  }
+
+  /* Przelozenie stanu encji pogody na to, co widac na niebie. */
+  _odswiezPogode() {
+    const e = this._el;
+    const st = this._config.weather_entity
+      ? this._hass.states[this._config.weather_entity] : null;
+    const p = oscPogoda(st);
+
+    if (!p) {
+      e.chmury.style.display = 'none';
+      e.opady.style.display = 'none';
+      e.drzewa.style.display = 'none';
+      return;
+    }
+    e.drzewa.style.display = '';
+
+    const ileChmur = p.chmury < 12 ? 0
+      : p.chmury < 35 ? 1 : p.chmury < 65 ? 2 : p.chmury < 90 ? 3 : 4;
+    e.chmury.style.display = ileChmur ? '' : 'none';
+    this._chmury.forEach((c, i) => {
+      c.style.display = i < ileChmur ? '' : 'none';
+      c.setAttribute('opacity', p.chmury > 85 ? '0.82' : '0.6');
+    });
+
+    const kropli = p.deszcz === 2 ? 18 : p.deszcz === 1 ? 10 : 0;
+    const platkow = p.snieg === 2 ? 16 : p.snieg === 1 ? 8 : 0;
+    e.opady.style.display = (kropli || platkow) ? '' : 'none';
+    this._krople.forEach((k, i) => { k.style.display = i < kropli ? '' : 'none'; });
+    this._platki.forEach((k, i) => { k.style.display = i < platkow ? '' : 'none'; });
+
+    const zima = oscZima(Date.now(),
+      this._hass.config ? this._hass.config.latitude : undefined);
+    const sredni = p.wiatr >= 10;
+    const silny = p.wiatr >= 30;
+    this._drzewa.forEach((t) => {
+      t.lisc.style.display = zima ? 'none' : '';
+      t.golo.style.display = zima ? '' : 'none';
+      t.d.classList.toggle('buja', sredni);
+      t.d.style.setProperty('--osc-kat', (silny ? 5.5 : 2.2) + 'deg');
+      t.d.style.setProperty('--osc-czas', (silny ? 1.5 : 2.9) + 's');
+    });
   }
 
   /*
@@ -1261,6 +1461,25 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
           <label>Maksymalne przyciemnienie nocne (0 = brak, 1 = czern)
             <input type="text" data-pole="dim_max" value="${oscEsc(cfg.dim_max === undefined ? 0.5 : cfg.dim_max)}">
           </label>
+          <label style="margin-top:10px">Encja pogody (opcjonalnie)
+            <select data-rola="pogoda">
+              <option value="">-- bez pogody --</option>
+              ${Object.keys(this._hass.states)
+                .filter((x) => x.startsWith('weather.')).sort()
+                .map((x) => {
+                  const n = this._hass.states[x].attributes.friendly_name || x;
+                  return '<option value="' + oscEsc(x) + '"' +
+                    (x === cfg.weather_entity ? ' selected' : '') + '>' +
+                    oscEsc(n) + '</option>';
+                }).join('')}
+            </select>
+          </label>
+          <div class="osc-info" style="margin-top:6px">
+            Po wskazaniu pogody na niebie pojawiaja sie chmury, deszcz albo snieg,
+            a po bokach drzewa &mdash; zielone od wiosny do jesieni, zima bez lisci.
+            Przy wietrze powyzej 10 km/h drzewa zaczynaja sie bujac, powyzej
+            30 km/h mocniej.
+          </div>
         </div>
 
         <div class="osc-krok">
@@ -1321,6 +1540,10 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     const plik = this.querySelector('.osc-plik');
     this.querySelector('.osc-btn-wgraj').addEventListener('click', () => plik.click());
     plik.addEventListener('change', () => this._wgrajZdjecie(plik.files && plik.files[0]));
+
+    const selPogoda = this.querySelector('select[data-rola="pogoda"]');
+    if (selPogoda) selPogoda.addEventListener('change', () =>
+      this._ustaw({ weather_entity: selPogoda.value }, true));
 
     const selAuto = this.querySelector('select[data-rola="automatyzacja"]');
     if (selAuto) selAuto.addEventListener('change', () =>
