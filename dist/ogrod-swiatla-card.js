@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '2.3.0';
+const OSC_WERSJA = '2.4.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -45,6 +45,26 @@ const oscBezier = (t, p0, p1, p2) => {
 
 /* Tryby swiatla, w ktorych da sie ustawic barwe, oraz zamiana hex <-> rgb. */
 const OSC_TRYBY_KOLORU = ['hs', 'rgb', 'rgbw', 'rgbww', 'rgbwww', 'xy'];
+
+/*
+ * Podstawowa paleta. Zolc jest celowo przesunieta w strone bursztynu:
+ * czysta zolc #ffff00 na diodach RGB wychodzi zielonkawa, bo kanal zielony
+ * swieci mocniej niz czerwony.
+ */
+const OSC_PALETA = [
+  ['#ffc98a', 'ciepla biel'],
+  ['#ffffff', 'biel'],
+  ['#ffb347', 'bursztyn'],
+  ['#ffd633', 'zolty'],
+  ['#ff7a18', 'pomaranczowy'],
+  ['#ff2d1a', 'czerwony'],
+  ['#ff4fa3', 'rozowy'],
+  ['#a24bff', 'fioletowy'],
+  ['#2a6bff', 'niebieski'],
+  ['#21d4d4', 'turkusowy'],
+  ['#35d14a', 'zielony'],
+  ['#9be84a', 'limonkowy'],
+];
 
 const oscTryby = (st) => (st && st.attributes && st.attributes.supported_color_modes) || [];
 const oscObslugujeKolor = (st) => oscTryby(st).some((m) => OSC_TRYBY_KOLORU.includes(m));
@@ -1299,16 +1319,25 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       const domyslny = punkt.color
         || (st.attributes && oscRgbNaHex(st.attributes.rgb_color))
         || '#ffd07a';
+      const probki = OSC_PALETA.map(([hex, nazwa]) =>
+        '<button type="button" data-rola="paleta" data-hex="' + hex + '"'
+        + ' class="' + (punkt.color && punkt.color.toLowerCase() === hex ? 'wybrana' : '') + '"'
+        + ' style="background:' + hex + '" title="' + nazwa + '"></button>').join('');
       barwa = `
         <div class="osc-barwa">
-          <label>Barwa zapalenia
-            <input type="color" data-rola="kolor" value="${oscEsc(domyslny)}">
-          </label>
-          <button type="button" data-rola="kolor-czysc">Bez wymuszania</button>
+          <b>Barwa zapalenia</b>
+          <div class="osc-paleta">${probki}</div>
+          <div class="osc-barwa-akcje">
+            <button type="button" data-rola="kolor-czysc" class="drobny">Bez wymuszania</button>
+            <details class="osc-pelna">
+              <summary>Pelna paleta</summary>
+              <input type="color" data-rola="kolor" value="${oscEsc(domyslny)}">
+            </details>
+          </div>
           <span>${punkt.color
-            ? 'Karta zapali te lampe w tej barwie.'
-            : 'Ta lampa obsluguje kolor. Wybierz barwe, jesli chcesz, zeby'
-              + ' karta zapalala ja zawsze tak samo.'}</span>
+            ? 'Karta zapali te lampe w barwie ' + oscEsc(punkt.color) + '.'
+            : 'Ta lampa obsluguje kolor. Wybierz barwe, jesli chcesz, zeby karta'
+              + ' zapalala ja zawsze tak samo.'}</span>
         </div>`;
     } else if (bialaReg) {
       barwa = `
@@ -1343,12 +1372,12 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       const v = punkt.color
         || (st.attributes && oscRgbNaHex(st.attributes.rgb_color))
         || '#ffd07a';
-      return '<input type="color" data-rola="kolor-wiersz" value="' + oscEsc(v) + '"'
-        + ' title="Barwa, w ktorej karta zapali te lampe">'
-        + (punkt.color
-          ? '<button type="button" data-rola="kolor-wiersz-czysc" class="drobny"'
-            + ' title="Nie wymuszaj barwy">bez</button>'
-          : '');
+      /* Sama probka; wybor barwy odbywa sie w panelu, gdzie jest na to miejsce. */
+      return '<button type="button" data-rola="probka"'
+        + ' class="probka' + (punkt.color ? '' : ' pusta') + '"'
+        + ' style="--osc-p:' + oscEsc(v) + '"'
+        + ' title="' + (punkt.color ? 'Barwa zapalenia: ' + oscEsc(v)
+          : 'Barwa niewymuszana - kliknij, zeby wybrac') + '"></button>';
     }
     if (oscObslugujeTemp(st)) {
       return '<input type="text" data-rola="kelwiny-wiersz" class="kelw"'
@@ -1434,21 +1463,30 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                      background: var(--secondary-background-color);
                      border-radius: 10px; padding: 10px; margin-top: 10px; }
         .osc-panel-rzad { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-        .osc-barwa { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+        .osc-barwa { display: grid; gap: 8px;
                      border-top: 1px solid var(--divider-color); padding-top: 10px; }
-        .osc-barwa label { flex: none; }
-        .osc-barwa input[type=color] { width: 54px; height: 32px; padding: 2px;
+        .osc-barwa > b { font-size: .82rem; }
+        .osc-paleta { display: flex; flex-wrap: wrap; gap: 7px; }
+        .osc-paleta button { width: 28px; height: 28px; border-radius: 50%; padding: 0;
+                             cursor: pointer; border: 2px solid transparent;
+                             box-shadow: 0 0 0 1px var(--divider-color); }
+        .osc-paleta button.wybrana { border-color: var(--primary-text-color); }
+        .osc-barwa-akcje { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .osc-barwa .drobny { border: none; border-radius: 8px; padding: 7px 10px;
+                             cursor: pointer; font-size: .78rem;
+                             background: var(--card-background-color);
+                             color: var(--primary-text-color); }
+        .osc-pelna summary { font-size: .78rem; cursor: pointer;
+                             color: var(--secondary-text-color); }
+        .osc-pelna input[type=color] { margin-top: 8px; width: 60px; height: 32px;
+                                       padding: 2px; border-radius: 8px;
                                        border: 1px solid var(--divider-color);
-                                       border-radius: 8px; background: none; cursor: pointer; }
+                                       background: none; cursor: pointer; }
         .osc-barwa input[type=text] { width: 90px; }
-        .osc-barwa button { border: none; border-radius: 8px; padding: 7px 10px;
-                            cursor: pointer; font-size: .78rem;
-                            background: var(--card-background-color);
-                            color: var(--primary-text-color); }
-        .osc-barwa span { flex: 1; min-width: 150px; font-size: .76rem;
-                          color: var(--secondary-text-color); line-height: 1.35; }
+        .osc-barwa > span { font-size: .76rem; color: var(--secondary-text-color);
+                            line-height: 1.35; }
         .osc-panel b { font-size: .85rem; }
-        .osc-panel select { flex: 1; min-width: 150px; padding: 6px; border-radius: 8px;
+        .osc-panel select { flex: 1 1 auto; min-width: 0; padding: 6px; border-radius: 8px;
                             border: 1px solid var(--divider-color);
                             background: var(--card-background-color);
                             color: var(--primary-text-color); }
@@ -1459,15 +1497,23 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                       border-radius: 8px; }
         .osc-wiersz.wybrany { background: rgba(3,169,244,.16); }
         .osc-wiersz .nr { width: 22px; text-align: center; font-weight: 700; font-size: .8rem; }
-        .osc-wiersz select { flex: 1; padding: 6px; border-radius: 8px; max-width: 100%;
+        /* min-width: 0 jest konieczne - bez niego <select> nie skurczy sie
+           ponizej szerokosci najdluzszej nazwy encji i rozpycha caly dialog. */
+        .osc-wiersz select { flex: 1 1 auto; min-width: 0; width: 100%;
+                             padding: 6px; border-radius: 8px;
                              border: 1px solid var(--divider-color);
                              background: var(--card-background-color);
-                             color: var(--primary-text-color); }
+                             color: var(--primary-text-color);
+                             text-overflow: ellipsis; }
         .osc-wiersz button { border: none; background: var(--error-color, #d33); color: #fff;
                              border-radius: 8px; padding: 6px 10px; cursor: pointer; }
-        .osc-wiersz input[type=color] { width: 38px; height: 30px; flex: none; padding: 2px;
-                                        border: 1px solid var(--divider-color);
-                                        border-radius: 8px; background: none; cursor: pointer; }
+        .osc-wiersz .probka { width: 30px; height: 30px; flex: none; padding: 0;
+                              border-radius: 8px; cursor: pointer;
+                              border: 1px solid var(--divider-color);
+                              background: var(--osc-p, #ffd07a); }
+        .osc-wiersz .probka.pusta {
+          background: repeating-linear-gradient(45deg,
+            var(--divider-color) 0 4px, transparent 4px 8px); }
         .osc-wiersz input.kelw { width: 56px; flex: none; padding: 6px; border-radius: 8px;
                                  border: 1px solid var(--divider-color);
                                  background: var(--card-background-color);
@@ -1703,15 +1749,16 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       b.addEventListener('click', () =>
         usunPunkt(Number(b.closest('.osc-wiersz').dataset.idx)));
     });
-    this.querySelectorAll('input[data-rola="kolor-wiersz"]').forEach((inp) => {
-      inp.addEventListener('change', () =>
-        zmienPunkt(Number(inp.closest('.osc-wiersz').dataset.idx),
-          { color: inp.value, color_temp_kelvin: undefined }));
+    /* Probka w wierszu tylko zaznacza punkt - barwe wybiera sie w panelu. */
+    this.querySelectorAll('button[data-rola="probka"]').forEach((b) => {
+      b.addEventListener('click', () => {
+        this._wybrany = Number(b.closest('.osc-wiersz').dataset.idx);
+        this._render();
+      });
     });
-    this.querySelectorAll('button[data-rola="kolor-wiersz-czysc"]').forEach((b) => {
+    this.querySelectorAll('button[data-rola="paleta"]').forEach((b) => {
       b.addEventListener('click', () =>
-        zmienPunkt(Number(b.closest('.osc-wiersz').dataset.idx),
-          { color: undefined, color_temp_kelvin: undefined }));
+        zmienPunkt(w, { color: b.dataset.hex, color_temp_kelvin: undefined }));
     });
     this.querySelectorAll('input[data-rola="kelwiny-wiersz"]').forEach((inp) => {
       inp.addEventListener('change', () => {

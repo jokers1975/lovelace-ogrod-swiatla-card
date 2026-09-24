@@ -14,7 +14,7 @@ property, decide how many minutes before sunset they should come on and after
 sunrise go off, and the card makes sure this does not clash with automations
 you already have.*
 
-![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-2.3.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja%20%C2%B7%20version-2.4.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 ![licencja](https://img.shields.io/badge/licencja%20%C2%B7%20license-MIT-blue)
 
@@ -59,10 +59,16 @@ wyłącza kolidujące wpisy i zostawia sterowanie wyłącznie Twojej automatyzac
 To zwykle najbardziej dokuczliwy problem przy oświetleniu zewnętrznym: dwa
 mechanizmy walczą o te same lampy i raz zapala jeden, raz drugi.
 
-**4. Barwa zapalenia.** Lampy obsługujące kolor dostają próbnik barwy wprost
-przy sobie na liście — karta rozpoznaje to po `supported_color_modes`. Lampy
-z regulowaną bielą dostają pole temperatury barwowej w kelwinach. Po ustawieniu
-barwy lampa zawsze wstaje w tym samym kolorze, a nie w tym, co akurat pamiętała.
+**4. Barwa zapalenia.** Lampy obsługujące kolor dostają przy sobie na liście
+próbkę barwy — karta rozpoznaje je po `supported_color_modes`. Kliknięcie próbki
+otwiera **paletę dwunastu podstawowych barw**; pełny próbnik systemowy kryje się
+pod rozwijanym „Pełna paleta". Lampy z regulowaną bielą dostają pole temperatury
+barwowej w kelwinach. Po ustawieniu barwy lampa zawsze wstaje w tym samym
+kolorze, a nie w tym, co akurat pamiętała.
+
+Żółć w palecie jest celowo przesunięta w stronę bursztynu. Czysta żółć
+`#ffff00` na diodach RGB wychodzi zielonkawa, bo kanał zielony świeci mocniej
+niż czerwony — dlatego wybierając żółty z pełnej palety łatwo trafić w limonkę.
 
 ### Oprawa wizualna
 
@@ -313,10 +319,17 @@ conflicting entries and leaves control to your automation alone.
 This is usually the most annoying failure mode with outdoor lighting: two
 mechanisms fighting over the same lamps, each undoing the other.
 
-**4. Colour.** Lamps that support colour get a colour swatch right beside them
-in the list — detected from `supported_color_modes`. Tunable-white lamps get a
-colour temperature field instead. Once set, a lamp always comes up in the same
-colour rather than whatever it happened to remember.
+**4. Colour.** Lamps that support colour get a swatch beside them in the list —
+detected from `supported_color_modes`. Clicking the swatch opens a **palette of
+twelve basic colours**; the full system picker hides behind a "full palette"
+disclosure. Tunable-white lamps get a colour temperature field instead. Once
+set, a lamp always comes up in the same colour rather than whatever it happened
+to remember.
+
+The yellow in the palette is deliberately shifted towards amber. Pure yellow
+`#ffff00` comes out greenish on RGB emitters because the green channel is
+brighter than the red one — which is why picking "yellow" from a full colour
+picker often lands on lime.
 
 ### Visual layer
 
