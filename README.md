@@ -3,25 +3,31 @@
 Karta pokazuje plan ogrodu z lotu ptaka, nanosi na niego lampy i steruje nimi
 względem wschodu i zachodu słońca.
 
-![wersja](https://img.shields.io/badge/wersja-1.5.0-2e7d32)
+![wersja](https://img.shields.io/badge/wersja-1.6.0-2e7d32)
 ![hacs](https://img.shields.io/badge/HACS-Dashboard-41BDF5)
 
 ## Co robi
 
-**Animowana pozycja słońca i księżyca.** Liczona z encji `sun.sun`
-(`elevation`, `next_rising`, `next_setting`). Niebo zmienia barwę od dnia,
-przez zmierzch, po noc z gwiazdami.
+**Słońce i księżyc naraz.** Pozycje obu ciał liczone są z astronomii
+pozycyjnej dla współrzędnych z konfiguracji Home Assistanta — wysokość
+i azymut, a nie sam postęp doby. Dzięki temu **księżyc bywa widoczny w dzień**,
+tak jak na prawdziwym niebie; przy słońcu wysoko nad horyzontem jest po prostu
+bledszy. Dokładność sprawdzona wobec `sun.sun`: różnica 0,05° wysokości
+i 0,01° azymutu.
 
-Po wejściu na kartę ciało niebieskie **wjeżdża od wschodu do swojej bieżącej
-pozycji** w ciągu około dwóch i pół sekundy, z wyhamowaniem na końcu. Za dnia
-robi to słońce, nocą — księżyc, który wędruje pod linią horyzontu.
+Po wejściu na kartę niebo **odtwarza się od ostatniego wschodu do chwili
+bieżącej** w ciągu około dwóch i pół sekundy, z wyhamowaniem. Animowany jest
+czas, więc obie tarcze jadą swoimi prawdziwymi torami. Próg wschodu uwzględnia
+refrakcję atmosferyczną (−0,833°), żeby zgadzał się z godziną z Home Assistanta.
 
-Księżyc pokazuje **rzeczywistą fazę**. Liczona jest z miesiąca synodycznego,
-bez żadnej dodatkowej encji, więc działa też bez integracji `moon`. Terminator
-to półelipsa o poziomej półosi `r·|cos 2πf|`: przy nowiu równa promieniowi,
-przy kwadrze zerowa, przy pełni znów równa promieniowi, ale z drugiej strony.
-Sierp przybywający jest oświetlony po prawej, ubywający po lewej — zgodnie
-z widokiem z półkuli północnej. Nazwa fazy trafia do podtytułu karty.
+Niebo zmienia barwę od dnia, przez zmierzch, po noc z gwiazdami.
+
+Księżyc pokazuje **rzeczywistą fazę**, liczoną z elongacji względem Słońca,
+bez żadnej dodatkowej encji. Terminator to półelipsa o poziomej półosi
+`r·|cos 2πf|`: przy nowiu równa promieniowi, przy kwadrze zerowa, przy pełni
+znów równa, ale z drugiej strony. Sierp przybywający jest oświetlony po prawej,
+ubywający po lewej — zgodnie z widokiem z półkuli północnej. Nazwa fazy trafia
+do podtytułu karty.
 
 **Plan ogrodu z punktami świetlnymi.** Kliknięcie punktu przełącza przypisaną
 encję, a świecąca lampa dostaje żółtą poświatę. Wieczorem zdjęcie przygasa
@@ -63,9 +69,13 @@ Dowolne zdjęcie z góry. W edytorze karty jest przycisk **Wgraj zdjęcie** —
 plik trafia do magazynu obrazów Home Assistanta i nie trzeba niczego kopiować
 do `/config/www`.
 
-Dobrym źródłem są darmowe ortofotomapy z krajowych serwisów geodezyjnych —
-w Polsce Geoportal GUGiK udostępnia zdjęcia w rozdzielczości rzędu 5 cm na
-piksel, czyli znacznie dokładniejsze niż popularne mapy internetowe.
+Dobrym źródłem są darmowe ortofotomapy z krajowych serwisów geodezyjnych.
+W Polsce [Geoportal GUGiK](https://mapy.geoportal.gov.pl/imap/) udostępnia
+zdjęcia w rozdzielczości rzędu **5 cm na piksel** — kilkanaście razy dokładniej
+niż popularne mapy internetowe — i obejmuje **cały kraj**. Link do niego jest
+też w kroku 1 edytora. Poza Polską poszukaj krajowego odpowiednika albo użyj
+własnego zdjęcia z drona.
+
 Kadr najlepiej obrócić tak, żeby ulica była na dole, a głąb ogrodu na górze.
 
 ## Barwa zapalenia

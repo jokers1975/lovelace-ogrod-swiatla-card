@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '1.5.0';
+const OSC_WERSJA = '1.6.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -65,32 +65,77 @@ const OSC_P0 = { x: 28, y: 118 };
 const OSC_P1 = { x: 200, y: -26 };
 const OSC_P2 = { x: 372, y: 118 };
 
-/* Pozycja ciala niebieskiego dla zadanego postepu doby (0..1).
-   Za dnia po luku nad horyzontem, noca po plytkim luku pod nim. */
-const oscPozycjaCiala = (dzien, t) => (dzien
-  ? oscBezier(t, OSC_P0, OSC_P1, OSC_P2)
-  : { x: 372 - t * 344, y: 118 + Math.sin(Math.PI * t) * 26 });
+/*
+ * Astronomia pozycyjna w wersji niskiej dokladnosci - w zupelnosci wystarcza,
+ * zeby umiescic dziewieciopikselowa tarcze na panelu. Slonce z dokladnoscia
+ * ulamka stopnia, ksiezyc okolo jednej trzeciej stopnia.
+ */
+const OSC_ST = Math.PI / 180;
 
-/* Faza ksiezyca liczona z miesiaca synodycznego, bez zadnej encji.
-   Punkt odniesienia: now 6 stycznia 2000, 18:14 UTC. */
-const OSC_NOW_ODN = Date.UTC(2000, 0, 6, 18, 14);
-const OSC_MIESIAC = 29.530588853 * 86400000;
-const oscFazaKsiezyca = (ts) => {
-  const d = (((ts - OSC_NOW_ODN) % OSC_MIESIAC) + OSC_MIESIAC) % OSC_MIESIAC;
-  return d / OSC_MIESIAC;              // 0 = now, 0.5 = pelnia
+/* Doby od epoki J2000.0, ulamkowe. */
+const oscDni = (ts) => (ts / 86400000) + 2440587.5 - 2451545.0;
+
+/* Dlugosc ekliptyczna Slonca. */
+const oscSlonceEkl = (n) => {
+  const L = 280.460 + 0.9856474 * n;
+  const g = (357.528 + 0.9856003 * n) * OSC_ST;
+  return { lam: L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g), bet: 0 };
 };
+
+/* Dlugosc i szerokosc ekliptyczna Ksiezyca. */
+const oscKsiezycEkl = (n) => {
+  const L = 218.316 + 13.176396 * n;
+  const M = (134.963 + 13.064993 * n) * OSC_ST;
+  const F = (93.272 + 13.229350 * n) * OSC_ST;
+  return { lam: L + 6.289 * Math.sin(M), bet: 5.128 * Math.sin(F) };
+};
+
+/* Wspolrzedne ekliptyczne -> wysokosc i azymut dla obserwatora. */
+const oscHoryzontalne = (ekl, n, lat, lon) => {
+  const eps = (23.439 - 0.0000004 * n) * OSC_ST;
+  const lam = ekl.lam * OSC_ST;
+  const bet = ekl.bet * OSC_ST;
+  const dec = Math.asin(Math.sin(bet) * Math.cos(eps)
+    + Math.cos(bet) * Math.sin(eps) * Math.sin(lam));
+  const ra = Math.atan2(
+    Math.sin(lam) * Math.cos(eps) - Math.tan(bet) * Math.sin(eps),
+    Math.cos(lam));
+  const gmst = (18.697374558 + 24.06570982441908 * n) % 24;
+  const lst = (((gmst * 15 + lon) % 360) + 360) % 360;
+  const H = lst * OSC_ST - ra;
+  const fi = lat * OSC_ST;
+  const alt = Math.asin(Math.sin(fi) * Math.sin(dec)
+    + Math.cos(fi) * Math.cos(dec) * Math.cos(H));
+  let az = Math.atan2(-Math.cos(dec) * Math.sin(H),
+    Math.sin(dec) * Math.cos(fi) - Math.cos(dec) * Math.sin(fi) * Math.cos(H));
+  az = (((az / OSC_ST) % 360) + 360) % 360;
+  return { alt: alt / OSC_ST, az };
+};
+
+/* Pelny stan nieba: obie tarcze naraz plus faza z elongacji. */
+const oscNiebo = (ts, lat, lon) => {
+  const n = oscDni(ts);
+  const sl = oscSlonceEkl(n);
+  const ks = oscKsiezycEkl(n);
+  return {
+    slonce: oscHoryzontalne(sl, n, lat, lon),
+    ksiezyc: oscHoryzontalne(ks, n, lat, lon),
+    faza: ((((ks.lam - sl.lam) % 360) + 360) % 360) / 360,
+  };
+};
+
+/* Wysokosc i azymut -> punkt na panelu. Poludnie posrodku, wschod po lewej. */
+const oscNaPanel = (alt, az) => ({
+  x: oscZacisk(28 + ((az - 45) / 270) * 344, 16, 384),
+  y: oscZacisk(118 - alt * 1.7, 10, 146),
+});
 
 const OSC_NAZWY_FAZ = ['now', 'sierp przybywajacy', 'pierwsza kwadra',
   'wypukly przybywajacy', 'pelnia', 'wypukly ubywajacy', 'ostatnia kwadra',
   'sierp ubywajacy'];
+/* Osiem nazw, kazda obejmuje osma czesc cyklu wysrodkowana na swojej fazie. */
 const oscNazwaFazy = (f) => OSC_NAZWY_FAZ[Math.floor(((f + 1 / 16) % 1) * 8) % 8];
 
-/*
- * Kontur oswietlonej czesci tarczy. Terminator to polowa elipsy o polosi
- * poziomej r*|cos(2*pi*f)|: przy nowiu rowna promieniowi (nic nie widac),
- * przy kwadrze zero (prosta), przy pelni znowu promieniowi, ale z drugiej
- * strony. Strona oswietlona zalezy od tego, czy ksiezyca przybywa.
- */
 const oscSciezkaKsiezyca = (cx, cy, r, f) => {
   const rosnie = f < 0.5;
   const kos = Math.cos(2 * Math.PI * f);
@@ -117,10 +162,6 @@ function oscStanSlonca(st) {
   const wschod = dzien ? nr - 86400000 : nr;
   const zachod = dzien ? ns : ns - 86400000;
 
-  const postep = dzien
-    ? oscZacisk((teraz - wschod) / (zachod - wschod), 0, 1)
-    : oscZacisk((teraz - zachod) / (nr - zachod), 0, 1);
-  const poz = oscPozycjaCiala(dzien, postep);
 
   return {
     dzien,
@@ -128,9 +169,6 @@ function oscStanSlonca(st) {
     zachod,
     nastepny_wschod: nr,
     nastepny_zachod: ns,
-    postep,
-    x: poz.x,
-    y: poz.y,
     elewacja: Number(a.elevation),
     azymut: Number(a.azimuth),
   };
@@ -213,6 +251,9 @@ class OgrodSwiatlaCard extends HTMLElement {
           background: rgba(255,152,0,.14); border: 1px solid rgba(255,152,0,.45);
           font-size: .82rem; line-height: 1.4; display: grid; gap: 8px;
         }
+        /* Bez tego display:grid z reguly wyzej bije [hidden] z arkusza
+           przegladarki i pasek widac zawsze. */
+        .konflikt[hidden] { display: none; }
         .konflikt-akcje { display: flex; gap: 8px; flex-wrap: wrap; }
         .konflikt button {
           border: none; border-radius: 8px; padding: 7px 12px; cursor: pointer;
@@ -610,8 +651,7 @@ class OgrodSwiatlaCard extends HTMLElement {
     e.g2.setAttribute('stop-color', g2);
     e.gwiazdy.setAttribute('opacity', String(gwiazdyOpacity));
     e.cialo.setAttribute('fill', kolorCiala);
-    this._slonceWidoczne = elew > -6;
-    this._poswiataOpacity = this._slonceWidoczne ? poswiataOpacity : 0;
+    this._poswiataOpacity = poswiataOpacity;
 
     /* Przyciemnienie podworka: pelne slonce -> brak, zmrok -> dim_max.
        Przejscie liniowe miedzy +8 a -8 stopnia wysokosci slonca. */
@@ -626,13 +666,17 @@ class OgrodSwiatlaCard extends HTMLElement {
       e.zmierzch.style.opacity = String(f * (Number.isFinite(maks) ? maks : 0.5));
     }
 
-    /* Wjazd od wschodu do biezacej pozycji przy pierwszym pokazaniu karty. */
+    /* Wjazd od wschodu do biezacej pozycji przy kazdym pokazaniu karty.
+       Animujemy czas, wiec obie tarcze jada swoimi prawdziwymi torami. */
+    const teraz = Date.now();
     if (!this._wjechalo && !this._klatka) {
+      const t0 = this._ostatniWschod(teraz);
       const CZAS = 2500;
       const start = performance.now();
       const klatka = (chwila) => {
         const u = Math.min(1, (chwila - start) / CZAS);
-        this._rysujCialo(s, s.postep * (1 - Math.pow(1 - u, 3)));
+        const w = 1 - Math.pow(1 - u, 3);
+        this._rysujNiebo(t0 + (teraz - t0) * w);
         if (u < 1) {
           this._klatka = requestAnimationFrame(klatka);
         } else {
@@ -642,7 +686,7 @@ class OgrodSwiatlaCard extends HTMLElement {
       };
       this._klatka = requestAnimationFrame(klatka);
     } else if (!this._klatka) {
-      this._rysujCialo(s, s.postep);
+      this._rysujNiebo(teraz);
     }
 
     e.tWschod.textContent = oscGodzina(s.wschod);
@@ -652,11 +696,10 @@ class OgrodSwiatlaCard extends HTMLElement {
     e.iZachod.textContent = oscGodzina(s.zachod);
     // Etykieta z wysokosci slonca, nie z kolejnosci wschodu/zachodu -
     // dzieki temu zawsze zgadza sie z przyciemnieniem podworka.
-    if (Number.isFinite(elew) && elew > 0) {
-      e.podtytul.textContent = 'dzien';
-    } else {
-      e.podtytul.textContent = 'noc \u00B7 ' + oscNazwaFazy(oscFazaKsiezyca(Date.now()));
-    }
+    const nb = this._niebo(Date.now());
+    let opis = (Number.isFinite(elew) && elew > 0) ? 'dzien' : 'noc';
+    if (nb && nb.ksiezyc.alt > -1) opis += ' \u00B7 ' + oscNazwaFazy(nb.faza);
+    e.podtytul.textContent = opis;
 
     const offZ = this._offset('zachod');
     const offW = this._offset('wschod');
@@ -664,37 +707,79 @@ class OgrodSwiatlaCard extends HTMLElement {
     e.iWyl.textContent = offW === null ? '--:--' : oscGodzina(s.nastepny_wschod + offW * 60000);
   }
 
+  /* Polozenie obserwatora z konfiguracji Home Assistanta. */
+  _niebo(ts) {
+    const k = this._hass && this._hass.config;
+    if (!k || !Number.isFinite(k.latitude) || !Number.isFinite(k.longitude)) return null;
+    return oscNiebo(ts, k.latitude, k.longitude);
+  }
+
   /*
-   * Umieszcza slonce albo ksiezyc w pozycji odpowiadajacej postepowi t (0..1).
-   * Wywolywane zarowno przez animacje wjazdu, jak i przy zwyklym odswiezeniu.
+   * Chwila, w ktorej nad horyzont wyszlo to cialo, ktore wlasnie widac.
+   * Od niej zaczyna sie animacja wjazdu. Szukanie wstecz co kwadrans,
+   * potem uscislenie polowieniem przedzialu.
    */
-  _rysujCialo(s, t) {
-    const e = this._el;
-    const poz = oscPozycjaCiala(s.dzien, t);
-    const x = poz.x.toFixed(1);
-    const y = poz.y.toFixed(1);
-
-    if (this._slonceWidoczne) {
-      e.cialo.setAttribute('cx', x);
-      e.cialo.setAttribute('cy', y);
-      e.cialo.setAttribute('opacity', '1');
-      e.poswiata.setAttribute('cx', x);
-      e.poswiata.setAttribute('cy', y);
-      e.poswiata.setAttribute('opacity', String(this._poswiataOpacity));
-      e.ksiezyc.setAttribute('opacity', '0');
-      return;
+  _ostatniWschod(ts) {
+    const nb = this._niebo(ts);
+    if (!nb) return ts - 6 * 3600000;
+    const ktore = nb.slonce.alt > 0 ? 'slonce' : 'ksiezyc';
+    const wys = (t) => {
+      const n = this._niebo(t);
+      return n ? n[ktore].alt : 1;
+    };
+    /* Prog -0,833 stopnia to standardowa poprawka na refrakcje atmosferyczna
+       i promien tarczy - dzieki niej wschod zgadza sie z tym, co pokazuje
+       Home Assistant, a nie wypada siedem minut pozniej. */
+    const PROG = -0.833;
+    if (wys(ts) <= PROG) return ts - 6 * 3600000;
+    const KROK = 15 * 60000;
+    for (let i = 1; i <= 96; i++) {
+      const t = ts - i * KROK;
+      if (wys(t) <= PROG) {
+        let a = t;
+        let b = t + KROK;
+        for (let j = 0; j < 12; j++) {
+          const m = (a + b) / 2;
+          if (wys(m) <= PROG) a = m; else b = m;
+        }
+        return b;
+      }
     }
+    return ts - 6 * 3600000;
+  }
 
-    /* Po zmierzchu slonce znika, a jego miejsce zajmuje ksiezyc z faza. */
-    e.cialo.setAttribute('opacity', '0');
-    e.poswiata.setAttribute('opacity', '0');
-    e.ksiezyc.setAttribute('opacity', '1');
-    e.ksPoswiata.setAttribute('cx', x);
-    e.ksPoswiata.setAttribute('cy', y);
-    e.ksTarcza.setAttribute('cx', x);
-    e.ksTarcza.setAttribute('cy', y);
-    e.ksSwiatlo.setAttribute('d',
-      oscSciezkaKsiezyca(Number(x), Number(y), 9, oscFazaKsiezyca(Date.now())));
+  /*
+   * Rysuje niebo w zadanej chwili. Slonce i ksiezyc sa niezalezne, wiec
+   * moga byc widoczne jednoczesnie - za dnia ksiezyc jest po prostu bledszy.
+   */
+  _rysujNiebo(ts) {
+    const e = this._el;
+    const nb = this._niebo(ts);
+    if (!nb) { e.cialo.setAttribute('opacity', '0'); e.ksiezyc.setAttribute('opacity', '0'); return; }
+
+    const sl = oscNaPanel(nb.slonce.alt, nb.slonce.az);
+    const widacSlonce = nb.slonce.alt > -6;
+    e.cialo.setAttribute('cx', sl.x.toFixed(1));
+    e.cialo.setAttribute('cy', sl.y.toFixed(1));
+    e.cialo.setAttribute('opacity', widacSlonce ? '1' : '0');
+    e.poswiata.setAttribute('cx', sl.x.toFixed(1));
+    e.poswiata.setAttribute('cy', sl.y.toFixed(1));
+    e.poswiata.setAttribute('opacity',
+      widacSlonce ? String(this._poswiataOpacity === undefined ? 1 : this._poswiataOpacity) : '0');
+
+    const ks = oscNaPanel(nb.ksiezyc.alt, nb.ksiezyc.az);
+    const widacKsiezyc = nb.ksiezyc.alt > -1;
+    /* Za dnia ksiezyc jest na niebie, ale slabo widoczny - oddajemy to krycie. */
+    e.ksiezyc.setAttribute('opacity',
+      !widacKsiezyc ? '0' : (nb.slonce.alt > 3 ? '0.45' : '1'));
+    if (widacKsiezyc) {
+      e.ksPoswiata.setAttribute('cx', ks.x.toFixed(1));
+      e.ksPoswiata.setAttribute('cy', ks.y.toFixed(1));
+      e.ksTarcza.setAttribute('cx', ks.x.toFixed(1));
+      e.ksTarcza.setAttribute('cy', ks.y.toFixed(1));
+      e.ksSwiatlo.setAttribute('d',
+        oscSciezkaKsiezyca(Number(ks.x.toFixed(1)), Number(ks.y.toFixed(1)), 9, nb.faza));
+    }
   }
 
   _offset(klucz) {
@@ -1034,6 +1119,7 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
         .osc-wiersz button { border: none; background: var(--error-color, #d33); color: #fff;
                              border-radius: 8px; padding: 6px 10px; cursor: pointer; }
         .osc-info { font-size: .8rem; color: var(--secondary-text-color); line-height: 1.5; }
+        .osc-info a { color: var(--primary-color); }
         .osc-brak { padding: 22px; text-align: center; font-size: .82rem;
                     color: var(--secondary-text-color);
                     border: 1px dashed var(--divider-color); border-radius: 10px; }
@@ -1054,11 +1140,22 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
             <button type="button" class="osc-btn-wgraj">Wgraj zdjecie</button>
             <input type="file" accept="image/*" class="osc-plik" hidden>
             <span class="osc-stan-zdjecie">Wlasne zdjecie z lotu ptaka albo zrzut
-              z portalu geodezyjnego. Plik trafia do magazynu Home Assistanta.</span>
+              z portalu mapowego. Plik trafia do magazynu Home Assistanta.</span>
           </div>
           <label>Adres zdjecia
             <input type="text" data-pole="image" value="${oscEsc(cfg.image || '')}">
           </label>
+          <div class="osc-info" style="margin-top:8px">
+            W Polsce najdokladniejsze zdjecia z gory daje darmowa ortofotomapa
+            Glownego Urzedu Geodezji i Kartografii &mdash; rozdzielczosc rzedu
+            5 cm na piksel, czyli kilkanascie razy lepiej niz zwykle mapy
+            internetowe. Obejmuje caly kraj.
+            <a href="https://mapy.geoportal.gov.pl/imap/" target="_blank"
+               rel="noopener noreferrer">Otworz Geoportal</a>.
+            Znajdz swoj adres, wlacz warstwe ortofotomapy, zrob zrzut ekranu
+            i wgraj go powyzej. Poza Polska poszukaj krajowego odpowiednika
+            albo uzyj wlasnego zdjecia z drona.
+          </div>
         </div>
 
         <div class="osc-krok">
