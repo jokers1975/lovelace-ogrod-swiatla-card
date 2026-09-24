@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="docs/baner.webp" width="100%"
+       alt="Zachod slonca na karcie: slonce tuz nad horyzontem, drzewa po bokach, chmura i pierwsze gwiazdy">
+</p>
+
 # Oświetlenie ogrodu · Garden Lights Card
 
 Karta Lovelace do Home Assistanta: plan ogrodu z lampami sterowanymi wschodem
