@@ -108,7 +108,11 @@ Animacje respektują systemowe ustawienie ograniczenia ruchu.
 3. **Sterowanie słońcem** — przycisk *Utwórz helpery* zakłada oba
    `input_number` z właściwym zakresem i jednostką. Tu wskazujesz też encję pogody.
 4. **Automatyzacja** — wskazujesz swoją automatyzację, dzięki czemu wykrywanie
-   konfliktów wie, czego nie ruszać i co włączyć.
+   konfliktów wie, czego nie ruszać i co włączyć. Jeśli żadnej jeszcze nie masz,
+   przycisk **Utwórz nową automatyzację** zakłada czystą, gotową automatyzację
+   sterowaną wyłącznie tą kartą i od razu ją podpina. Zapala lampy względem
+   zachodu, gasi względem wschodu, a przesunięcia czyta na bieżąco z helperów —
+   zmiana suwaka na karcie działa natychmiast, bez edycji automatyzacji.
 
 Rozmieszczanie lamp:
 
@@ -119,6 +123,26 @@ Rozmieszczanie lamp:
 
 Współrzędne zapisywane są w procentach wymiarów obrazka, więc punkty trzymają
 się swoich miejsc niezależnie od rozmiaru ekranu.
+
+### Grupy świateł
+
+Grupa to kilka źródeł światła sterowanych razem — albo **jeden przekaźnik,
+który zapala kilka żarówek**. Zakładasz ją w kroku 2, w rozwijanym panelu
+*Grupy świateł*: nadajesz nazwę i zaznaczasz źródła (przytrzymaj Ctrl, by wybrać
+kilka naraz). Potem przy punkcie wybierasz grupę zamiast pojedynczej encji —
+grupy pojawiają się na początku tej samej listy.
+
+Dwa typowe zastosowania:
+
+- **kilka lamp, jedno kliknięcie** — jeden punkt na planie steruje całą grupą.
+  Punkt świeci, gdy świeci cokolwiek w grupie; kliknięcie gasi wszystko naraz;
+- **jeden przekaźnik, pięć żarówek** — przypisz **tę samą grupę do kilku
+  punktów**. Każda żarówka dostaje swoje miejsce na planie i swoją poświatę,
+  a steruje nimi wspólny przełącznik.
+
+Barwę ustawia się osobno dla każdego punktu, więc ten sam przekaźnik może mieć
+różnie pokolorowane poświaty w różnych miejscach ogrodu. Automatyzacja tworzona
+przyciskiem z kroku 4 obejmuje wszystkie źródła z grup, bez powtórzeń.
 
 ### Skąd wziąć zdjęcie posesji
 
@@ -174,6 +198,12 @@ offset_zachod_entity: input_number.ogrod_offset_zachod
 offset_wschod_entity: input_number.ogrod_offset_wschod
 automation_entity: automation.ogrod_swiatla
 dim_max: 0.5
+groups:
+  - id: taras
+    name: Taras
+    entities:
+      - light.ogrod_lampa_3
+      - light.ogrod_lampa_4
 points:
   - entity: light.ogrod_lampa_1
     x: 33
@@ -182,6 +212,9 @@ points:
   - entity: switch.ogrod_lampa_2
     x: 70
     y: 27
+  - group: taras
+    x: 52
+    y: 61
 ```
 
 | pole | domyślnie | znaczenie |
@@ -191,13 +224,16 @@ points:
 | `offset_zachod_entity` | — | `input_number` z przesunięciem włączenia |
 | `offset_wschod_entity` | — | `input_number` z przesunięciem wyłączenia |
 | `automation_entity` | — | Twoja automatyzacja, włączana przy rozwiązywaniu konfliktu |
+| `groups` | `[]` | grupy świateł: `id`, `name`, `entities` |
 | `points` | `[]` | lista punktów świetlnych |
 | `sun_entity` | `sun.sun` | encja słońca |
 | `weather_entity` | — | encja pogody; bez niej niebo zostaje czyste |
 | `dim_max` | `0.5` | maksymalne nocne przyciemnienie tła, `0`–`1` |
 
-Punkt przyjmuje `entity`, `x`, `y` oraz opcjonalnie `color` (`#rrggbb`)
-albo `color_temp_kelvin`.
+Punkt przyjmuje `x`, `y`, opcjonalnie `color` (`#rrggbb`) albo
+`color_temp_kelvin`, oraz **`entity` albo `group`** — `group` wskazuje `id`
+grupy z listy `groups`. Tę samą grupę można przypisać do dowolnej liczby
+punktów.
 
 ### Helpery przesunięć
 
@@ -372,7 +408,12 @@ Animations honour the system reduced-motion preference.
 3. **Sun control** — a button creates both `input_number` helpers with the right
    range and unit. The weather entity is chosen here too.
 4. **Automation** — point the card at your automation so conflict detection
-   knows what to leave alone and what to enable.
+   knows what to leave alone and what to enable. If you have none yet, the
+   **Create a new automation** button builds a clean one driven solely by this
+   card and connects it straight away. It switches the lamps on relative to
+   sunset and off relative to sunrise, reading the offsets live from the
+   helpers — moving a slider on the card takes effect at once, with no need to
+   edit the automation.
 
 Placing lamps:
 
@@ -382,6 +423,27 @@ Placing lamps:
 
 Coordinates are stored as percentages of the image, so points stay put at any
 screen size.
+
+### Light groups
+
+A group is several light sources switched together — or **a single relay that
+powers several bulbs**. You create one in step 2, in the collapsible *Light
+groups* panel: give it a name and select the sources (hold Ctrl to pick
+several). Then choose the group instead of a single entity for a point; groups
+appear at the top of the same list.
+
+Two typical uses:
+
+- **several lamps, one click** — a single point on the plan drives the whole
+  group. The point glows when anything in the group is on, and clicking it
+  switches everything off at once;
+- **one relay, five bulbs** — assign **the same group to several points**. Each
+  bulb gets its own spot and its own glow on the plan, while one switch drives
+  them all.
+
+Colour is set per point, so the same relay can glow differently in different
+corners of the garden. The automation created in step 4 covers every source
+from every group, without duplicates.
 
 ### Where to get an aerial photo
 
@@ -428,8 +490,10 @@ Settings → Dashboards → ⋮ → Resources.
 See the Polish configuration table above; the option names are identical.
 In short: `image`, `offset_zachod_entity` (switch-on offset),
 `offset_wschod_entity` (switch-off offset), `automation_entity`, `points`,
-and optionally `sun_entity`, `weather_entity` and `dim_max`. Each point takes
-`entity`, `x`, `y` and optionally `color` (`#rrggbb`) or `color_temp_kelvin`.
+and optionally `sun_entity`, `weather_entity`, `dim_max` and `groups`. Each
+point takes `x`, `y`, optionally `color` (`#rrggbb`) or `color_temp_kelvin`,
+and either `entity` or `group` — the latter referencing an `id` from `groups`.
+The same group may be assigned to any number of points.
 
 A negative offset means **before** the event, a positive one **after**.
 

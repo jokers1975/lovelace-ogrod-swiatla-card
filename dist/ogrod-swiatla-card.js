@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '3.0.0';
+const OSC_WERSJA = '3.1.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -159,6 +159,32 @@ const OSC_TEKSTY = {
       + ' i harmonogramy sterujace tymi samymi lampami i zaproponuje ich wylaczenie.'
       + ' Gotowy przyklad znajdziesz w opisie dodatku.',
     automatyzacjaKarty: 'Automatyzacja tej karty',
+    krokGrupy: 'Grupy swiatel',
+    grupyOpis: 'Grupa to kilka zrodel swiatla sterowanych razem albo jeden przekaznik,'
+      + ' ktory zapala kilka zarowek. Zaloz grupe, a potem wskaz ja przy punkcie'
+      + ' na zdjeciu. Te sama grupe mozesz przypisac do kilku punktow - wtedy kazda'
+      + ' zarowka ma swoje miejsce na planie, a steruje nimi jeden przelacznik.',
+    dodajGrupe: 'Dodaj grupe',
+    nazwaGrupy: 'Nazwa grupy',
+    usunGrupeTyt: 'Usun grupe',
+    grupaEncje: 'Zrodla swiatla w grupie (przytrzymaj Ctrl, by zaznaczyc kilka)',
+    brakGrup: 'Nie ma jeszcze zadnej grupy.',
+    grupaLicznik: (n) => n === 1 ? '1 zrodlo' : (n >= 2 && n <= 4 ? n + ' zrodla' : n + ' zrodel'),
+    grupaNowa: (n) => 'Grupa ' + n,
+    grupaUsunieta: 'Grupa zostala usunieta',
+    utworzAutomatyzacje: 'Utworz nowa automatyzacje',
+    automatyzacjaNowaOpis: 'Zaloze czysta automatyzacje sterowana wylacznie ta karta:'
+      + ' zapali wskazane lampy wzgledem zachodu i zgasi je wzgledem wschodu, z Twoimi'
+      + ' przesunieciami. Pozniej mozesz ja dowolnie zmieniac w Home Assistancie.',
+    automatyzacjaTworze: 'Tworze automatyzacje...',
+    automatyzacjaUtworzona: 'Automatyzacja gotowa i podlaczona do karty.',
+    automatyzacjaBlad: (t) => 'Nie udalo sie utworzyc automatyzacji: ' + t,
+    automatyzacjaNazwa: 'Ogrod - oswietlenie wg wschodu i zachodu slonca',
+    automatyzacjaZapis: 'Utworzona przez karte Oswietlenie ogrodu. Zapala i gasi lampy'
+      + ' wzgledem zachodu i wschodu slonca, a przesuniecia czyta z helperow karty.',
+    automatyzacjaBrakLamp: 'Najpierw przypisz lampy w kroku 2.',
+    automatyzacjaBrakHelperow: 'Najpierw utworz helpery w kroku 3.',
+    automatyzacjaBrakApi: 'Brak dostepu do API - zaloz automatyzacje recznie.',
     brakOpcji: '-- brak --',
     zaawansowane: 'Ustawienia zaawansowane',
     tytul: 'Tytul',
@@ -278,6 +304,32 @@ const OSC_TEKSTY = {
       + ' detect other automations and schedulers driving the same lamps and offer to'
       + ' disable them. A ready example is in the add-on description.',
     automatyzacjaKarty: 'This card’s automation',
+    krokGrupy: 'Light groups',
+    grupyOpis: 'A group is several light sources switched together, or a single relay'
+      + ' that powers several bulbs. Create a group, then pick it for a point on the'
+      + ' photo. You can assign the same group to several points - each bulb then has'
+      + ' its own place on the plan while one switch drives them all.',
+    dodajGrupe: 'Add group',
+    nazwaGrupy: 'Group name',
+    usunGrupeTyt: 'Remove group',
+    grupaEncje: 'Light sources in the group (hold Ctrl to pick several)',
+    brakGrup: 'No groups yet.',
+    grupaLicznik: (n) => n === 1 ? '1 source' : n + ' sources',
+    grupaNowa: (n) => 'Group ' + n,
+    grupaUsunieta: 'Group was removed',
+    utworzAutomatyzacje: 'Create a new automation',
+    automatyzacjaNowaOpis: 'I will create a clean automation driven solely by this card:'
+      + ' it switches the chosen lamps on relative to sunset and off relative to sunrise,'
+      + ' using your offsets. You can edit it freely in Home Assistant afterwards.',
+    automatyzacjaTworze: 'Creating the automation...',
+    automatyzacjaUtworzona: 'Automation created and connected to the card.',
+    automatyzacjaBlad: (t) => 'Could not create the automation: ' + t,
+    automatyzacjaNazwa: 'Garden - lighting by sunrise and sunset',
+    automatyzacjaZapis: 'Created by the Garden lighting card. Switches the lamps on and'
+      + ' off relative to sunset and sunrise, reading the offsets from the card helpers.',
+    automatyzacjaBrakLamp: 'Assign the lamps in step 2 first.',
+    automatyzacjaBrakHelperow: 'Create the helpers in step 3 first.',
+    automatyzacjaBrakApi: 'No API access - create the automation manually.',
     brakOpcji: '-- none --',
     zaawansowane: 'Advanced settings',
     tytul: 'Title',
@@ -877,6 +929,35 @@ class OgrodSwiatlaCard extends HTMLElement {
   }
 
   /* Przebudowa punktow tylko gdy zmienila sie ich lista, nie przy kazdym stanie. */
+  /* Grupy swiatel zdefiniowane w konfiguracji karty. */
+  get _grupy() {
+    return Array.isArray(this._config.groups) ? this._config.groups : [];
+  }
+
+  /* Grupa przypisana do punktu albo null, gdy punkt wskazuje pojedyncza encje. */
+  _grupaPunktu(p) {
+    if (!p || !p.group) return null;
+    return this._grupy.find((g) => g.id === p.group) || null;
+  }
+
+  /*
+   * Encje, ktorymi steruje punkt. Punkt wskazuje albo jedna encje, albo grupe -
+   * wtedy jedno klikniecie obsluguje wszystkie jej zrodla naraz. Ta sama grupa
+   * moze stac pod kilkoma punktami, gdy jeden przekaznik zapala kilka zarowek.
+   */
+  _encjePunktu(p) {
+    const g = this._grupaPunktu(p);
+    if (g) return (Array.isArray(g.entities) ? g.entities : []).filter(Boolean);
+    return p && p.entity ? [p.entity] : [];
+  }
+
+  /* Wszystkie encje karty bez powtorzen - uzywane do wykrywania konfliktow. */
+  _encjeKarty() {
+    const lista = [];
+    (this._config.points || []).forEach((p) => lista.push(...this._encjePunktu(p)));
+    return [...new Set(lista)];
+  }
+
   _rysujPunkty() {
     if (!this._zbudowana) return;
     const punkty = Array.isArray(this._config.points) ? this._config.points : [];
@@ -912,20 +993,33 @@ class OgrodSwiatlaCard extends HTMLElement {
       d.innerHTML = '<span class="rdzen"></span><span class="etykieta"></span>';
       d.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        if (!p.entity || !this._hass) return;
-        const st = this._hass.states[p.entity];
-        const swieci = st && st.state === 'on';
+        if (!this._hass) return;
+        const encje = this._encjePunktu(p);
+        if (!encje.length) return;
+        /* Grupa swieci, gdy swieci cokolwiek w niej - wtedy klikniecie gasi calosc. */
+        const swieci = encje.some((e) => {
+          const st = this._hass.states[e];
+          return !!st && st.state === 'on';
+        });
+        if (swieci) {
+          this._hass.callService('homeassistant', 'turn_off', { entity_id: encje });
+          return;
+        }
         const barwa = oscHexNaRgb(p.color);
-        /* Zapalenie lampy z zadana barwa; gaszenie i lampy bez barwy
-           obsluguje zwykle przelaczenie. */
-        if (!swieci && p.entity.startsWith('light.') && (barwa || p.color_temp_kelvin)) {
-          const dane = { entity_id: p.entity };
+        const lampy = encje.filter((e) => e.startsWith('light.'));
+        const reszta = encje.filter((e) => !e.startsWith('light.'));
+        /* Barwe da sie zadac tylko zrodlom light.; przekazniki zapalamy zwyczajnie. */
+        if (lampy.length && (barwa || p.color_temp_kelvin)) {
+          const dane = { entity_id: lampy };
           if (barwa) dane.rgb_color = barwa;
           else dane.color_temp_kelvin = Number(p.color_temp_kelvin);
           this._hass.callService('light', 'turn_on', dane);
-          return;
+        } else if (lampy.length) {
+          this._hass.callService('homeassistant', 'turn_on', { entity_id: lampy });
         }
-        this._hass.callService('homeassistant', 'toggle', { entity_id: p.entity });
+        if (reszta.length) {
+          this._hass.callService('homeassistant', 'turn_on', { entity_id: reszta });
+        }
       });
       mapa.appendChild(d);
     });
@@ -1091,8 +1185,7 @@ class OgrodSwiatlaCard extends HTMLElement {
    */
   async _sprawdzKonflikty() {
     if (this._konfliktUkryty || !this._hass) return;
-    const encje = [...new Set((this._config.points || [])
-      .map((p) => p.entity).filter(Boolean))];
+    const encje = this._encjeKarty();
     const klucz = JSON.stringify([encje, this._config.automation_entity]);
     if (klucz === this._konfliktKlucz && this._konfliktyTrwa !== true) {
       this._pokazKonflikt();
@@ -1403,21 +1496,28 @@ class OgrodSwiatlaCard extends HTMLElement {
     this._el.mapa.querySelectorAll('.punkt').forEach((d) => {
       const p = punkty[Number(d.dataset.idx)];
       if (!p) return;
-      const st = p.entity && this._hass.states[p.entity];
-      d.classList.toggle('brak-encji', !st);
-      d.classList.toggle('swieci', !!st && st.state === 'on');
-      /* Poswiata przyjmuje barwe, ktora lampa faktycznie swieci,
-         a gdy jej nie podaje - barwe z konfiguracji punktu. */
-      const barwa = (st && st.attributes && oscRgbNaHex(st.attributes.rgb_color))
+      const grupa = this._grupaPunktu(p);
+      const stany = this._encjePunktu(p)
+        .map((e) => this._hass.states[e]).filter(Boolean);
+      const swieci = stany.some((x) => x.state === 'on');
+      d.classList.toggle('brak-encji', !stany.length);
+      d.classList.toggle('swieci', swieci);
+      /* Poswiata przyjmuje barwe, ktora lampa faktycznie swieci, a gdy jej nie
+         podaje - barwe z konfiguracji punktu. W grupie liczy sie pierwsza
+         zapalona, bo to ona nadaje ton calemu punktowi. */
+      const zapalona = stany.find((x) => x.state === 'on');
+      const barwa = (zapalona && zapalona.attributes
+          && oscRgbNaHex(zapalona.attributes.rgb_color))
         || p.color || null;
       if (barwa) d.style.setProperty('--osc-kolor', barwa);
       else d.style.removeProperty('--osc-kolor');
       const nazwa = p.name
-        || (st && st.attributes.friendly_name)
+        || (grupa && grupa.name)
+        || (stany[0] && stany[0].attributes.friendly_name)
         || p.entity
         || this._s.punktNieprzypisany;
-      const stan = !st ? this._s.stanNiedostepna
-        : (st.state === 'on' ? this._s.stanWlaczone : this._s.stanWylaczone);
+      const stan = !stany.length ? this._s.stanNiedostepna
+        : (swieci ? this._s.stanWlaczone : this._s.stanWylaczone);
       d.querySelector('.etykieta').textContent = nazwa + ' · ' + stan;
     });
   }
@@ -1471,6 +1571,33 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
 
   _istnieje(encja) {
     return !!(encja && this._hass && this._hass.states[encja]);
+  }
+
+  /* Grupy swiatel z konfiguracji. */
+  _grupy() {
+    return Array.isArray(this._config.groups) ? this._config.groups : [];
+  }
+
+  _grupaPunktu(p) {
+    if (!p || !p.group) return null;
+    return this._grupy().find((g) => g.id === p.group) || null;
+  }
+
+  /* Encje punktu - z grupy albo pojedyncza. */
+  _encjePunktu(p) {
+    const g = this._grupaPunktu(p);
+    if (g) return (Array.isArray(g.entities) ? g.entities : []).filter(Boolean);
+    return p && p.entity ? [p.entity] : [];
+  }
+
+  /* Pierwsza istniejaca encja punktu - po niej poznajemy mozliwosci barwy. */
+  _pierwszaEncja(p) {
+    return this._encjePunktu(p).find((e) => this._istnieje(e)) || null;
+  }
+
+  /* Punkt jest przypisany, gdy wskazuje encje albo niepusta grupe. */
+  _punktPrzypisany(p) {
+    return this._encjePunktu(p).length > 0;
   }
 
   /*
@@ -1545,13 +1672,121 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
   }
 
   /*
+   * Zaklada czysta automatyzacje sterowana wylacznie ta karta i od razu ja
+   * podpina pod karte. Wyzwalaczami sa dwa szablony: pierwszy staje sie prawda,
+   * gdy minie zachod powiekszony o przesuniecie, drugi - gdy minie wschod.
+   * Szablon zawierajacy now() Home Assistant przelicza co minute, dzieki czemu
+   * przesuniecia ujemne (zapal jeszcze przed zachodem) dzialaja tak samo dobrze
+   * jak dodatnie. Nie uzywamy wyzwalacza sun z offsetem, bo ten nie przyjmuje
+   * wartosci z helpera - byla by zamrozona w chwili zapisu.
+   */
+  async _utworzAutomatyzacje() {
+    const stan = this.querySelector('.osc-stan-automat');
+    const pisz = (t) => { if (stan) stan.textContent = t; };
+    if (!this._hass || typeof this._hass.callApi !== 'function') {
+      pisz(this._s.automatyzacjaBrakApi);
+      return;
+    }
+    const cfg = this._config;
+    if (!this._istnieje(cfg.offset_zachod_entity)
+        || !this._istnieje(cfg.offset_wschod_entity)) {
+      pisz(this._s.automatyzacjaBrakHelperow);
+      return;
+    }
+
+    /* Lampy z zadana barwa zapalamy osobno, reszte jednym wywolaniem. */
+    const wszystkie = [];
+    const zBarwa = [];
+    (cfg.points || []).forEach((p) => {
+      const e = this._encjePunktu(p);
+      if (!e.length) return;
+      wszystkie.push(...e);
+      const barwa = oscHexNaRgb(p.color);
+      if (!barwa && !p.color_temp_kelvin) return;
+      const lampy = e.filter((x) => x.startsWith('light.'));
+      if (lampy.length) zBarwa.push({ lampy, barwa, kelwiny: p.color_temp_kelvin });
+    });
+    const unikalne = [...new Set(wszystkie)];
+    if (!unikalne.length) {
+      pisz(this._s.automatyzacjaBrakLamp);
+      return;
+    }
+    const zBarwaEncje = new Set();
+    zBarwa.forEach((z) => z.lampy.forEach((l) => zBarwaEncje.add(l)));
+    const zwykle = unikalne.filter((e) => !zBarwaEncje.has(e));
+
+    const sun = cfg.sun_entity || 'sun.sun';
+    const warunek =
+      "(as_timestamp(now()) >= as_timestamp(state_attr('" + sun + "','next_setting'))"
+      + " + (states('" + cfg.offset_zachod_entity + "') | float(0)) * 60)"
+      + " if is_state('" + sun + "','above_horizon') else "
+      + "(as_timestamp(now()) < as_timestamp(state_attr('" + sun + "','next_rising'))"
+      + " + (states('" + cfg.offset_wschod_entity + "') | float(0)) * 60)";
+
+    const zapal = zBarwa.map((z) => {
+      const dane = {};
+      if (z.barwa) dane.rgb_color = z.barwa;
+      else dane.color_temp_kelvin = Number(z.kelwiny);
+      return { action: 'light.turn_on', target: { entity_id: z.lampy }, data: dane };
+    });
+    if (zwykle.length) {
+      zapal.push({ action: 'homeassistant.turn_on', target: { entity_id: zwykle } });
+    }
+
+    const nazwa = this._s.automatyzacjaNazwa;
+    const konfig = {
+      alias: nazwa,
+      description: this._s.automatyzacjaZapis,
+      mode: 'single',
+      triggers: [
+        { trigger: 'template', value_template: '{{ ' + warunek + ' }}', id: 'zapal' },
+        { trigger: 'template', value_template: '{{ not (' + warunek + ') }}', id: 'zgas' },
+      ],
+      conditions: [],
+      actions: [{
+        choose: [
+          { conditions: [{ condition: 'trigger', id: 'zapal' }], sequence: zapal },
+          {
+            conditions: [{ condition: 'trigger', id: 'zgas' }],
+            sequence: [{
+              action: 'homeassistant.turn_off',
+              target: { entity_id: unikalne },
+            }],
+          },
+        ],
+      }],
+    };
+
+    pisz(this._s.automatyzacjaTworze);
+    try {
+      const id = 'osc' + Date.now();
+      await this._hass.callApi('POST', 'config/automation/config/' + id, konfig);
+      /* Encja powstaje dopiero po przeladowaniu automatyzacji - czekamy na nia
+         po nazwie przyjaznej, tak samo jak przy helperach. */
+      let encja = null;
+      for (let i = 0; i < 25 && !encja; i++) {
+        await new Promise((r) => setTimeout(r, 200));
+        encja = Object.keys(this._hass.states).find((e) =>
+          e.startsWith('automation.') &&
+          this._hass.states[e].attributes.friendly_name === nazwa);
+      }
+      if (!encja) throw new Error(this._s.nieOdnaleziono(nazwa));
+      pisz(this._s.automatyzacjaUtworzona);
+      this._ustaw({ automation_entity: encja }, true);
+    } catch (e) {
+      pisz(this._s.automatyzacjaBlad(e.message || String(e)));
+    }
+  }
+
+  /*
    * Panel zaznaczonego punktu. Gdy encja jest zrodlem swiatla obslugujacym
    * barwe, dochodzi wybor koloru; gdy tylko biel regulowana - temperatura.
    */
   _panelPunktu(i, punkt, opcje) {
-    const st = punkt.entity ? this._hass.states[punkt.entity] : null;
-    const kolorowa = st && punkt.entity.startsWith('light.') && oscObslugujeKolor(st);
-    const bialaReg = st && punkt.entity.startsWith('light.')
+    const encja = this._pierwszaEncja(punkt);
+    const st = encja ? this._hass.states[encja] : null;
+    const kolorowa = st && encja.startsWith('light.') && oscObslugujeKolor(st);
+    const bialaReg = st && encja.startsWith('light.')
       && !kolorowa && oscObslugujeTemp(st);
 
     let barwa = '';
@@ -1596,7 +1831,7 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
       <div class="osc-panel">
         <div class="osc-panel-rzad">
           <b>${this._s.punktNr(i + 1)}</b>
-          <select data-rola="encja-wybrany">${opcje(punkt.entity)}</select>
+          <select data-rola="encja-wybrany">${opcje(punkt)}</select>
           <button type="button" class="usun" data-rola="usun-wybrany">${this._s.usunPunkt}</button>
         </div>
         ${barwa}
@@ -1606,8 +1841,9 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
   /* Male sterowanie barwa w wierszu listy - zeby nie trzeba bylo najpierw
      klikac punktu na zdjeciu, zeby w ogole zobaczyc, ze barwe da sie ustawic. */
   _barwaWiersza(punkt) {
-    const st = punkt.entity ? this._hass.states[punkt.entity] : null;
-    if (!st || !punkt.entity.startsWith('light.')) return '';
+    const encja = this._pierwszaEncja(punkt);
+    const st = encja ? this._hass.states[encja] : null;
+    if (!st || !encja.startsWith('light.')) return '';
     if (oscObslugujeKolor(st)) {
       const v = punkt.color
         || (st.attributes && oscRgbNaHex(st.attributes.rgb_color))
@@ -1634,19 +1870,35 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     if (this._wybrany !== undefined && this._wybrany >= punkty.length) this._wybrany = undefined;
     const encje = this._listaEncji();
 
-    const opcje = (wybrana) =>
-      '<option value="">' + oscEsc(this._s.wybierzEncje) + '</option>' +
-      encje.map((e) => {
-        const st = this._hass.states[e];
-        const n = (st && st.attributes.friendly_name) || e;
-        return '<option value="' + oscEsc(e) + '"' + (e === wybrana ? ' selected' : '') +
-          '>' + oscEsc(n) + ' (' + oscEsc(e) + ')</option>';
-      }).join('');
+    const grupy = this._grupy();
+    /* Jedna lista wyboru: najpierw grupy, potem pojedyncze encje. Grupy maja
+       przedrostek "g:", zeby odroznic je od identyfikatora encji. */
+    const opcje = (punkt) => {
+      const p = punkt || {};
+      return '<option value="">' + oscEsc(this._s.wybierzEncje) + '</option>' +
+        (grupy.length
+          ? '<optgroup label="' + oscEsc(this._s.krokGrupy) + '">' +
+            grupy.map((g) => {
+              const ile = (Array.isArray(g.entities) ? g.entities : []).length;
+              const n = g.name || this._s.nazwaGrupy;
+              return '<option value="g:' + oscEsc(g.id) + '"' +
+                (p.group === g.id ? ' selected' : '') + '>' +
+                oscEsc(n) + ' (' + oscEsc(this._s.grupaLicznik(ile)) + ')</option>';
+            }).join('') + '</optgroup>'
+          : '') +
+        encje.map((e) => {
+          const st = this._hass.states[e];
+          const n = (st && st.attributes.friendly_name) || e;
+          return '<option value="' + oscEsc(e) + '"' +
+            (!p.group && e === p.entity ? ' selected' : '') +
+            '>' + oscEsc(n) + ' (' + oscEsc(e) + ')</option>';
+        }).join('');
+    };
 
     const w = this._wybrany;
     const wybranyPunkt = w === undefined ? null : punkty[w];
 
-    const przypisane = punkty.filter((p) => p.entity).length;
+    const przypisane = punkty.filter((p) => this._punktPrzypisany(p)).length;
     const helperyOk = this._istnieje(cfg.offset_zachod_entity)
       && this._istnieje(cfg.offset_wschod_entity);
     const znacznik = (ok) => ok
@@ -1768,6 +2020,22 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                     border: 1px dashed var(--divider-color); border-radius: 10px; }
         .osc-zaawansowane summary { font-size: .82rem; cursor: pointer;
                                     color: var(--secondary-text-color); }
+        .osc-grupy { margin-top: 12px; border-top: 1px solid var(--divider-color);
+                     padding-top: 10px; }
+        .osc-grupy > summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
+        .osc-grupa { border: 1px solid var(--divider-color); border-radius: 10px;
+                     padding: 8px; margin-top: 8px; display: grid; gap: 8px; }
+        .osc-grupa-rzad { display: flex; gap: 8px; align-items: center; }
+        .osc-grupa-rzad input[type=text] { flex: 1 1 auto; min-width: 0; }
+        .osc-grupa-licz { font-size: .72rem; color: var(--secondary-text-color);
+                          white-space: nowrap; }
+        .osc-grupa-rzad button { border: none; background: transparent; cursor: pointer;
+                                 color: var(--error-color, #d33); font-size: 1rem; }
+        .osc-grupa select[multiple] { width: 100%; min-width: 0; padding: 6px;
+                                      border-radius: 8px;
+                                      border: 1px solid var(--divider-color);
+                                      background: var(--card-background-color);
+                                      color: var(--primary-text-color); }
         .osc-zaawansowane[open] summary { margin-bottom: 10px; }
         .osc-zaawansowane > div { display: grid; gap: 10px; }
         .osc-krok label select { padding: 7px; border-radius: 8px; max-width: 100%;
@@ -1806,7 +2074,7 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
             ? `<div class="osc-plotno" style="margin-top:10px">
                  <img src="${oscEsc(cfg.image)}" alt="">
                  ${punkty.map((p, i) =>
-                   `<div class="osc-pkt${i === w ? ' wybrany' : ''}${p.entity ? '' : ' pusty'}"
+                   `<div class="osc-pkt${i === w ? ' wybrany' : ''}${this._punktPrzypisany(p) ? '' : ' pusty'}"
                          data-idx="${i}"
                          style="left:${Number(p.x) || 0}%;top:${Number(p.y) || 0}%">${i + 1}</div>`
                  ).join('')}
@@ -1817,11 +2085,45 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
             ${punkty.map((p, i) => `
                 <div class="osc-wiersz${i === w ? ' wybrany' : ''}" data-idx="${i}">
                   <span class="nr">${i + 1}</span>
-                  <select data-rola="encja">${opcje(p.entity)}</select>
+                  <select data-rola="encja">${opcje(p)}</select>
                   ${this._barwaWiersza(p)}
                   <button type="button" data-rola="usun" title="${this._s.usunPunktTyt}">&#10005;</button>
                 </div>`).join('')}
           </div>
+
+          <details class="osc-grupy"${grupy.length ? ' open' : ''}>
+            <summary>${this._s.krokGrupy}</summary>
+            <div class="osc-info" style="margin-top:8px">${this._s.grupyOpis}</div>
+            ${grupy.length
+              ? grupy.map((g) => `
+                  <div class="osc-grupa" data-gid="${oscEsc(g.id)}">
+                    <div class="osc-grupa-rzad">
+                      <input type="text" data-rola="grupa-nazwa"
+                             value="${oscEsc(g.name || '')}"
+                             placeholder="${this._s.nazwaGrupy}">
+                      <span class="osc-grupa-licz">${oscEsc(this._s.grupaLicznik(
+                        (Array.isArray(g.entities) ? g.entities : []).length))}</span>
+                      <button type="button" data-rola="grupa-usun"
+                              title="${this._s.usunGrupeTyt}">&#10005;</button>
+                    </div>
+                    <label>${this._s.grupaEncje}
+                      <select data-rola="grupa-encje" multiple size="5">
+                        ${encje.map((e) => {
+                          const st = this._hass.states[e];
+                          const n = (st && st.attributes.friendly_name) || e;
+                          const jest = (g.entities || []).indexOf(e) !== -1;
+                          return '<option value="' + oscEsc(e) + '"' +
+                            (jest ? ' selected' : '') + '>' + oscEsc(n) + '</option>';
+                        }).join('')}
+                      </select>
+                    </label>
+                  </div>`).join('')
+              : '<div class="osc-info" style="margin-top:8px">'
+                + oscEsc(this._s.brakGrup) + '</div>'}
+            <div class="osc-akcja" style="margin-top:10px">
+              <button type="button" class="osc-btn-grupa">${this._s.dodajGrupe}</button>
+            </div>
+          </details>
         </div>
 
         <div class="osc-krok">
@@ -1872,6 +2174,10 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                 }).join('')}
             </select>
           </label>
+          <div class="osc-akcja" style="margin-top:10px">
+            <button type="button" class="osc-btn-automat">${this._s.utworzAutomatyzacje}</button>
+            <span class="osc-stan-automat">${this._s.automatyzacjaNowaOpis}</span>
+          </div>
         </div>
 
         <details class="osc-zaawansowane osc-krok">
@@ -1919,9 +2225,60 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     const btnHelpery = this.querySelector('.osc-btn-helpery');
     if (btnHelpery) btnHelpery.addEventListener('click', () => this._utworzHelpery());
 
+    const btnAutomat = this.querySelector('.osc-btn-automat');
+    if (btnAutomat) btnAutomat.addEventListener('click', () => this._utworzAutomatyzacje());
+
+    const zmienGrupe = (gid, zmiany) => {
+      const nowe = this._grupy().map((g) => (g.id === gid ? { ...g, ...zmiany } : g));
+      this._ustaw({ groups: nowe }, true);
+    };
+    const btnGrupa = this.querySelector('.osc-btn-grupa');
+    if (btnGrupa) btnGrupa.addEventListener('click', () => {
+      const lista = this._grupy();
+      const nowa = {
+        id: 'g' + Date.now().toString(36),
+        name: this._s.grupaNowa(lista.length + 1),
+        entities: [],
+      };
+      this._ustaw({ groups: [...lista, nowa] }, true);
+    });
+    this.querySelectorAll('input[data-rola="grupa-nazwa"]').forEach((inp) => {
+      inp.addEventListener('change', () =>
+        zmienGrupe(inp.closest('.osc-grupa').dataset.gid, { name: inp.value.trim() }));
+    });
+    this.querySelectorAll('select[data-rola="grupa-encje"]').forEach((sel) => {
+      sel.addEventListener('change', () =>
+        zmienGrupe(sel.closest('.osc-grupa').dataset.gid, {
+          entities: [...sel.selectedOptions].map((o) => o.value),
+        }));
+    });
+    this.querySelectorAll('button[data-rola="grupa-usun"]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const gid = b.closest('.osc-grupa').dataset.gid;
+        /* Punkty osierocone przez usunieta grupe wracaja do stanu nieprzypisanego,
+           zeby nie wskazywaly identyfikatora, ktorego juz nie ma. */
+        const punktyBezGrupy = (this._config.points || []).map((p) => {
+          if (p.group !== gid) return p;
+          const kopia = { ...p };
+          delete kopia.group;
+          return kopia;
+        });
+        this._ustaw({
+          groups: this._grupy().filter((g) => g.id !== gid),
+          points: punktyBezGrupy,
+        }, true);
+      });
+    });
+
     const zmienEncje = (i, wartosc) => {
       const nowe = this._config.points.slice();
-      nowe[i] = { ...nowe[i], entity: wartosc };
+      if (wartosc && wartosc.indexOf('g:') === 0) {
+        nowe[i] = { ...nowe[i], group: wartosc.slice(2) };
+        delete nowe[i].entity;
+      } else {
+        nowe[i] = { ...nowe[i], entity: wartosc };
+        delete nowe[i].group;
+      }
       this._ustaw({ points: nowe }, true);
     };
     const usunPunkt = (i) => {
