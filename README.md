@@ -124,6 +124,33 @@ Rozmieszczanie lamp:
 Współrzędne zapisywane są w procentach wymiarów obrazka, więc punkty trzymają
 się swoich miejsc niezależnie od rozmiaru ekranu.
 
+### Jeden przekaźnik, kilka żarówek na planie
+
+Najczęstszy przypadek w ogrodzie: jeden obwód zapala pięć lamp. Chcesz, żeby na
+planie zaświeciło się pięć punktów, a nie jeden — i żeby kliknięcie w dowolny
+z nich przełączyło cały obwód.
+
+Rozstaw żarówki w zwykły sposób, a potem w kroku 2 naciśnij **Zaznacz kilka
+żarówek**. Klikaj punkty na zdjęciu — podświetlą się — wskaż **jeden przekaźnik**
+z listy encji i naciśnij **Przypisz zaznaczonym**. Wszystkie dostają tę samą
+encję, więc:
+
+- gdy przekaźnik się załączy, **zapalą się wszystkie te punkty naraz**,
+- kliknięcie w którykolwiek z nich gasi albo zapala **cały obwód**.
+
+Punkty dzielące jeden obwód dostają na planie wspólną literę (`A`, `B`, …), więc
+od razu widać, które należą do siebie. Barwę poświaty ustawiasz nadal osobno dla
+każdego punktu.
+
+### Przełącznik „wszystkie światła"
+
+W nagłówku karty jest przełącznik obejmujący wszystkie jej światła. Służy do
+ręcznego przejęcia sterowania: w środku dnia zgasisz nim lampy, które z jakiegoś
+powodu zostały zapalone, a wieczorem zapalisz je, nie czekając na próg zachodu.
+
+Automatyzacja nie jest przy tym ruszana — przy najbliższym przejściu przez próg
+i tak ustawi swoje. To doraźna poprawka, nie tryb ręczny.
+
 ### Grupy świateł
 
 Grupa to kilka źródeł światła sterowanych razem — albo **jeden przekaźnik,
@@ -136,9 +163,9 @@ Dwa typowe zastosowania:
 
 - **kilka lamp, jedno kliknięcie** — jeden punkt na planie steruje całą grupą.
   Punkt świeci, gdy świeci cokolwiek w grupie; kliknięcie gasi wszystko naraz;
-- **jeden przekaźnik, pięć żarówek** — przypisz **tę samą grupę do kilku
-  punktów**. Każda żarówka dostaje swoje miejsce na planie i swoją poświatę,
-  a steruje nimi wspólny przełącznik.
+Do przypadku „jeden przekaźnik, pięć żarówek" grupa nie jest potrzebna —
+wystarczy wspólna encja, opisana wyżej. Grupa przydaje się wtedy, gdy **jeden
+punkt** ma sterować **kilkoma różnymi** źródłami światła.
 
 Barwę ustawia się osobno dla każdego punktu, więc ten sam przekaźnik może mieć
 różnie pokolorowane poświaty w różnych miejscach ogrodu. Automatyzacja tworzona
@@ -424,6 +451,33 @@ Placing lamps:
 Coordinates are stored as percentages of the image, so points stay put at any
 screen size.
 
+### One relay, several bulbs on the plan
+
+The commonest garden case: one circuit powers five lamps. You want five points
+to light up on the plan rather than one, and clicking any of them to switch the
+whole circuit.
+
+Place the bulbs as usual, then press **Select several bulbs** in step 2. Click
+the points on the photo — they get highlighted — pick **one relay** from the
+entity list and press **Assign to selected**. They all receive the same entity,
+so:
+
+- when the relay switches on, **all those points light up at once**,
+- clicking any one of them switches **the whole circuit** on or off.
+
+Points sharing a circuit get a common letter (`A`, `B`, …) on the plan, so you
+can see at a glance which belong together. Glow colour is still set per point.
+
+### The “all lights” switch
+
+The card header carries a switch covering every light on the card. It is there
+for taking over by hand: switch the lamps off in the middle of the day if they
+were left on, or switch them on in the evening without waiting for the sunset
+threshold.
+
+The automation is left untouched — it will set its own state at the next
+threshold crossing. This is a stopgap, not a manual mode.
+
 ### Light groups
 
 A group is several light sources switched together — or **a single relay that
@@ -437,9 +491,9 @@ Two typical uses:
 - **several lamps, one click** — a single point on the plan drives the whole
   group. The point glows when anything in the group is on, and clicking it
   switches everything off at once;
-- **one relay, five bulbs** — assign **the same group to several points**. Each
-  bulb gets its own spot and its own glow on the plan, while one switch drives
-  them all.
+The “one relay, five bulbs” case needs no group — a shared entity, described
+above, is enough. Groups earn their keep when **a single point** should drive
+**several different** light sources.
 
 Colour is set per point, so the same relay can glow differently in different
 corners of the garden. The automation created in step 4 covers every source

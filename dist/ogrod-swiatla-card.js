@@ -15,7 +15,7 @@
  * Wartosc UJEMNA offsetu = PRZED zdarzeniem, DODATNIA = PO zdarzeniu.
  */
 
-const OSC_WERSJA = '3.1.0';
+const OSC_WERSJA = '3.2.0';
 
 const oscEsc = (s) =>
   String(s === undefined || s === null ? '' : s).replace(/[&<>"']/g, (c) => ({
@@ -160,6 +160,24 @@ const OSC_TEKSTY = {
       + ' Gotowy przyklad znajdziesz w opisie dodatku.',
     automatyzacjaKarty: 'Automatyzacja tej karty',
     krokGrupy: 'Grupy swiatel',
+    wszystkieSwiatla: 'Wszystkie swiatla',
+    wszystkieZapal: 'Zapal teraz wszystkie swiatla karty, nie czekajac na zachod',
+    wszystkieZgas: 'Zgas teraz wszystkie swiatla karty, nie czekajac na wschod',
+    wszystkieBrak: 'Najpierw przypisz lampy w konfiguracji karty',
+    zaznaczKilka: 'Zaznacz kilka zarowek',
+    zakonczZaznaczanie: 'Zakoncz zaznaczanie',
+    zaznaczanieOpis: 'Klikaj zarowki na zdjeciu, zeby je zaznaczyc, a potem wskaz'
+      + ' jeden przekaznik dla wszystkich naraz. Tak sie opisuje jeden obwod,'
+      + ' ktory zapala kilka lamp: na planie zaswieca sie wszystkie, a klikniecie'
+      + ' w dowolna z nich przelacza caly obwod.',
+    zaznaczono: (n) => n === 1 ? 'Zaznaczono 1 zarowke' : (n >= 2 && n <= 4
+      ? 'Zaznaczono ' + n + ' zarowki' : 'Zaznaczono ' + n + ' zarowek'),
+    zaznaczNic: 'Nie zaznaczono jeszcze zadnej zarowki.',
+    wspolnyPrzekaznik: 'Przekaznik dla zaznaczonych zarowek',
+    przypiszZaznaczonym: 'Przypisz zaznaczonym',
+    wyczyscZaznaczenie: 'Wyczysc zaznaczenie',
+    przypisano: (n) => 'Przypisano do ' + n + '. Wszystkie beda sie zapalac i gasic razem.',
+    wspolnyTyt: (litera, n) => 'Wspolny obwod ' + litera + ' - ' + n + ' zarowek na planie',
     grupyOpis: 'Grupa to kilka zrodel swiatla sterowanych razem albo jeden przekaznik,'
       + ' ktory zapala kilka zarowek. Zaloz grupe, a potem wskaz ja przy punkcie'
       + ' na zdjeciu. Te sama grupe mozesz przypisac do kilku punktow - wtedy kazda'
@@ -305,6 +323,23 @@ const OSC_TEKSTY = {
       + ' disable them. A ready example is in the add-on description.',
     automatyzacjaKarty: 'This card’s automation',
     krokGrupy: 'Light groups',
+    wszystkieSwiatla: 'All lights',
+    wszystkieZapal: 'Switch all the card’s lights on now, without waiting for sunset',
+    wszystkieZgas: 'Switch all the card’s lights off now, without waiting for sunrise',
+    wszystkieBrak: 'Assign the lamps in the card settings first',
+    zaznaczKilka: 'Select several bulbs',
+    zakonczZaznaczanie: 'Finish selecting',
+    zaznaczanieOpis: 'Click bulbs on the photo to select them, then pick one relay'
+      + ' for all of them at once. That is how you describe a single circuit driving'
+      + ' several lamps: all of them light up on the plan, and clicking any one of'
+      + ' them switches the whole circuit.',
+    zaznaczono: (n) => n === 1 ? '1 bulb selected' : n + ' bulbs selected',
+    zaznaczNic: 'No bulbs selected yet.',
+    wspolnyPrzekaznik: 'Relay for the selected bulbs',
+    przypiszZaznaczonym: 'Assign to selected',
+    przypisano: (n) => 'Assigned to ' + n + '. They will now switch on and off together.',
+    wyczyscZaznaczenie: 'Clear selection',
+    wspolnyTyt: (litera, n) => 'Shared circuit ' + litera + ' - ' + n + ' bulbs on the plan',
     grupyOpis: 'A group is several light sources switched together, or a single relay'
       + ' that powers several bulbs. Create a group, then pick it for a point on the'
       + ' photo. You can assign the same group to several points - each bulb then has'
@@ -649,6 +684,24 @@ class OgrodSwiatlaCard extends HTMLElement {
           gap: 8px; padding: 14px 16px 6px 16px;
         }
         .tytul { font-size: 1.25rem; font-weight: 500; }
+        .glowny {
+          margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+          border: none; background: transparent; cursor: pointer; padding: 2px;
+          color: var(--secondary-text-color); font-size: .78rem; font-family: inherit;
+        }
+        .glowny[disabled] { opacity: .45; cursor: default; }
+        .glowny .suwak {
+          width: 38px; height: 21px; border-radius: 999px; flex: none;
+          background: var(--disabled-text-color, #9e9e9e); position: relative;
+          transition: background .18s ease;
+        }
+        .glowny .suwak::after {
+          content: ''; position: absolute; top: 2px; left: 2px;
+          width: 17px; height: 17px; border-radius: 50%; background: #fff;
+          transition: transform .18s ease;
+        }
+        .glowny.wl .suwak { background: var(--primary-color); }
+        .glowny.wl .suwak::after { transform: translateX(17px); }
         .podtytul { font-size: .8rem; color: var(--secondary-text-color); }
         .konflikt-tytul { font-size: .88rem; }
         .konflikt {
@@ -777,6 +830,9 @@ class OgrodSwiatlaCard extends HTMLElement {
         <div class="naglowek">
           <span class="tytul"></span>
           <span class="podtytul"></span>
+          <button type="button" class="glowny">
+            <span class="glowny-napis"></span><span class="suwak"></span>
+          </button>
         </div>
         <div class="konflikt" hidden>
           <b class="konflikt-tytul"></b>
@@ -844,6 +900,8 @@ class OgrodSwiatlaCard extends HTMLElement {
 
     this._el = {
       tytul: this.shadowRoot.querySelector('.tytul'),
+      glowny: this.shadowRoot.querySelector('.glowny'),
+      glownyNapis: this.shadowRoot.querySelector('.glowny-napis'),
       podtytul: this.shadowRoot.querySelector('.podtytul'),
       g1: this.shadowRoot.querySelector('.niebo-g1'),
       g2: this.shadowRoot.querySelector('.niebo-g2'),
@@ -882,6 +940,8 @@ class OgrodSwiatlaCard extends HTMLElement {
     this._el.gwiazdy.innerHTML = losowe
       .map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i % 3 === 0 ? 1.4 : 0.9}" fill="#fff" opacity="${0.5 + (i % 4) * 0.12}"/>`)
       .join('');
+
+    this._el.glowny.addEventListener('click', () => this._przelaczWszystkie());
 
     this.shadowRoot.querySelector('.konflikt-ignoruj')
       .addEventListener('click', () => {
@@ -929,6 +989,47 @@ class OgrodSwiatlaCard extends HTMLElement {
   }
 
   /* Przebudowa punktow tylko gdy zmienila sie ich lista, nie przy kazdym stanie. */
+  /*
+   * Reczne przejecie sterowania: zapala albo gasi wszystkie swiatla karty od
+   * razu, nie czekajac na zachod ani wschod. Automatyzacja nie jest ruszana -
+   * przy najblizszym przejsciu progu i tak ustawi swoje, wiec to wylacznie
+   * doraźna poprawka w srodku dnia albo wieczorem.
+   */
+  _przelaczWszystkie() {
+    if (!this._hass) return;
+    const encje = this._encjeKarty();
+    if (!encje.length) return;
+    if (this._wszystkieSwieca()) {
+      this._hass.callService('homeassistant', 'turn_off', { entity_id: encje });
+      return;
+    }
+    /* Zapalamy tak samo jak klikniecie punktu, zeby barwy byly te same. */
+    const bezBarwy = new Set(encje);
+    (this._config.points || []).forEach((p) => {
+      const barwa = oscHexNaRgb(p.color);
+      if (!barwa && !p.color_temp_kelvin) return;
+      const lampy = this._encjePunktu(p).filter((e) => e.startsWith('light.'));
+      if (!lampy.length) return;
+      const dane = { entity_id: lampy };
+      if (barwa) dane.rgb_color = barwa;
+      else dane.color_temp_kelvin = Number(p.color_temp_kelvin);
+      this._hass.callService('light', 'turn_on', dane);
+      lampy.forEach((e) => bezBarwy.delete(e));
+    });
+    const reszta = [...bezBarwy];
+    if (reszta.length) {
+      this._hass.callService('homeassistant', 'turn_on', { entity_id: reszta });
+    }
+  }
+
+  /* Czy swieci cokolwiek z karty. */
+  _wszystkieSwieca() {
+    return this._encjeKarty().some((e) => {
+      const st = this._hass && this._hass.states[e];
+      return !!st && st.state === 'on';
+    });
+  }
+
   /* Grupy swiatel zdefiniowane w konfiguracji karty. */
   get _grupy() {
     return Array.isArray(this._config.groups) ? this._config.groups : [];
@@ -1033,7 +1134,21 @@ class OgrodSwiatlaCard extends HTMLElement {
     this._odswiezOffsety();
     this._odswiezStanyPunktow();
     this._odswiezPogode();
+    this._odswiezGlowny();
     this._sprawdzKonflikty();
+  }
+
+  /* Przelacznik w naglowku - podpis i polozenie suwaka wedlug stanu swiatel. */
+  _odswiezGlowny() {
+    const g = this._el.glowny;
+    if (!g) return;
+    const encje = this._encjeKarty();
+    const swieci = this._wszystkieSwieca();
+    g.disabled = !encje.length;
+    g.classList.toggle('wl', swieci);
+    this._el.glownyNapis.textContent = this._s.wszystkieSwiatla;
+    g.title = !encje.length ? this._s.wszystkieBrak
+      : (swieci ? this._s.wszystkieZgas : this._s.wszystkieZapal);
   }
 
   /* Elementy pogody powstaja raz; pozniej tylko je pokazujemy i chowamy. */
@@ -1573,6 +1688,28 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     return !!(encja && this._hass && this._hass.states[encja]);
   }
 
+  /* Indeksy zarowek zaznaczonych do wspolnego przypisania. */
+  _zazn() {
+    if (!this._zaznaczone) this._zaznaczone = new Set();
+    return this._zaznaczone;
+  }
+
+  /*
+   * Litery wspolnych obwodow. Encja uzyta przez wiecej niz jedna zarowke
+   * dostaje litere, zeby na pierwszy rzut oka bylo widac, ktore punkty na
+   * planie zapala ten sam przekaznik.
+   */
+  _literyObwodow(punkty) {
+    const ile = {};
+    punkty.forEach((p) => { if (p.entity) ile[p.entity] = (ile[p.entity] || 0) + 1; });
+    const litery = {};
+    let kod = 65;
+    Object.keys(ile).filter((e) => ile[e] > 1).sort().forEach((e) => {
+      litery[e] = { litera: String.fromCharCode(kod++), ile: ile[e] };
+    });
+    return litery;
+  }
+
   /* Grupy swiatel z konfiguracji. */
   _grupy() {
     return Array.isArray(this._config.groups) ? this._config.groups : [];
@@ -1871,6 +2008,9 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     const encje = this._listaEncji();
 
     const grupy = this._grupy();
+    const litery = this._literyObwodow(punkty);
+    const zazn = this._zazn();
+    const tryb = !!this._trybZaznaczania;
     /* Jedna lista wyboru: najpierw grupy, potem pojedyncze encje. Grupy maja
        przedrostek "g:", zeby odroznic je od identyfikatora encji. */
     const opcje = (punkt) => {
@@ -2020,6 +2160,20 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
                     border: 1px dashed var(--divider-color); border-radius: 10px; }
         .osc-zaawansowane summary { font-size: .82rem; cursor: pointer;
                                     color: var(--secondary-text-color); }
+        .osc-pkt.zazn { outline: 3px solid var(--primary-color);
+                        outline-offset: 2px; }
+        .osc-pkt[data-wsp]::after {
+          content: attr(data-wsp); position: absolute; top: -9px; right: -9px;
+          width: 15px; height: 15px; border-radius: 50%; font-size: .6rem;
+          display: flex; align-items: center; justify-content: center;
+          background: var(--primary-color); color: #fff; font-weight: 700;
+        }
+        .osc-wsp { font-size: .62rem; font-weight: 700; color: #fff;
+                   background: var(--primary-color); border-radius: 999px;
+                   padding: 1px 6px; white-space: nowrap; }
+        .osc-zazn-panel { margin-top: 10px; padding: 10px; border-radius: 10px;
+                          background: var(--secondary-background-color);
+                          display: grid; gap: 8px; }
         .osc-grupy { margin-top: 12px; border-top: 1px solid var(--divider-color);
                      padding-top: 10px; }
         .osc-grupy > summary { cursor: pointer; font-size: .85rem; font-weight: 600; }
@@ -2074,17 +2228,52 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
             ? `<div class="osc-plotno" style="margin-top:10px">
                  <img src="${oscEsc(cfg.image)}" alt="">
                  ${punkty.map((p, i) =>
-                   `<div class="osc-pkt${i === w ? ' wybrany' : ''}${this._punktPrzypisany(p) ? '' : ' pusty'}"
-                         data-idx="${i}"
+                   `<div class="osc-pkt${i === w ? ' wybrany' : ''}${this._punktPrzypisany(p) ? '' : ' pusty'}${zazn.has(i) ? ' zazn' : ''}"
+                         data-idx="${i}"${p.entity && litery[p.entity]
+                           ? ' data-wsp="' + litery[p.entity].litera + '" title="'
+                             + oscEsc(this._s.wspolnyTyt(litery[p.entity].litera,
+                                                         litery[p.entity].ile)) + '"'
+                           : ''}
                          style="left:${Number(p.x) || 0}%;top:${Number(p.y) || 0}%">${i + 1}</div>`
                  ).join('')}
                </div>`
             : '<div class="osc-brak" style="margin-top:10px">' + oscEsc(this._s.najpierwZdjecie) + '</div>'}
-          ${wybranyPunkt ? this._panelPunktu(w, wybranyPunkt, opcje) : ''}
+          <div class="osc-akcja" style="margin-top:10px">
+            <button type="button" class="osc-btn-zazn">${tryb
+              ? this._s.zakonczZaznaczanie : this._s.zaznaczKilka}</button>
+            <span>${this._s.zaznaczanieOpis}</span>
+          </div>
+          ${tryb ? `
+            <div class="osc-zazn-panel">
+              <b>${zazn.size ? oscEsc(this._s.zaznaczono(zazn.size))
+                             : oscEsc(this._s.zaznaczNic)}</b>
+              <label>${this._s.wspolnyPrzekaznik}
+                <select data-rola="wspolna-encja">
+                  <option value="">${this._s.wybierzEncje}</option>
+                  ${encje.map((e) => {
+                    const st = this._hass.states[e];
+                    const n = (st && st.attributes.friendly_name) || e;
+                    return '<option value="' + oscEsc(e) + '">' +
+                      oscEsc(n) + ' (' + oscEsc(e) + ')</option>';
+                  }).join('')}
+                </select>
+              </label>
+              <div class="osc-akcja">
+                <button type="button" class="osc-btn-przypisz"${zazn.size ? '' : ' disabled'}>${this._s.przypiszZaznaczonym}</button>
+                <button type="button" class="osc-btn-zazn-czysc">${this._s.wyczyscZaznaczenie}</button>
+                <span class="osc-stan-zazn"></span>
+              </div>
+            </div>` : ''}
+          ${wybranyPunkt && !tryb ? this._panelPunktu(w, wybranyPunkt, opcje) : ''}
           <div class="osc-lista">
             ${punkty.map((p, i) => `
                 <div class="osc-wiersz${i === w ? ' wybrany' : ''}" data-idx="${i}">
                   <span class="nr">${i + 1}</span>
+                  ${p.entity && litery[p.entity]
+                    ? '<span class="osc-wsp" title="' + oscEsc(this._s.wspolnyTyt(
+                        litery[p.entity].litera, litery[p.entity].ile)) + '">'
+                      + litery[p.entity].litera + '</span>'
+                    : ''}
                   <select data-rola="encja">${opcje(p)}</select>
                   ${this._barwaWiersza(p)}
                   <button type="button" data-rola="usun" title="${this._s.usunPunktTyt}">&#10005;</button>
@@ -2224,6 +2413,41 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
 
     const btnHelpery = this.querySelector('.osc-btn-helpery');
     if (btnHelpery) btnHelpery.addEventListener('click', () => this._utworzHelpery());
+
+    const btnZazn = this.querySelector('.osc-btn-zazn');
+    if (btnZazn) btnZazn.addEventListener('click', () => {
+      this._trybZaznaczania = !this._trybZaznaczania;
+      if (!this._trybZaznaczania) this._zazn().clear();
+      else this._wybrany = undefined;
+      this._render();
+    });
+    const btnZaznCzysc = this.querySelector('.osc-btn-zazn-czysc');
+    if (btnZaznCzysc) btnZaznCzysc.addEventListener('click', () => {
+      this._zazn().clear();
+      this._render();
+    });
+    const btnPrzypisz = this.querySelector('.osc-btn-przypisz');
+    if (btnPrzypisz) btnPrzypisz.addEventListener('click', () => {
+      const sel = this.querySelector('select[data-rola="wspolna-encja"]');
+      const stanZ = this.querySelector('.osc-stan-zazn');
+      const encja = sel ? sel.value : '';
+      const idx = [...this._zazn()];
+      if (!encja || !idx.length) return;
+      /* Wspolny obwod to po prostu ta sama encja pod kilkoma zarowkami:
+         przekaznik zapala je wszystkie, a klikniecie w dowolna przelacza calosc. */
+      const nowe = (this._config.points || []).map((p, i) => {
+        if (idx.indexOf(i) === -1) return p;
+        const kopia = { ...p, entity: encja };
+        delete kopia.group;
+        return kopia;
+      });
+      const ile = idx.length;
+      this._zazn().clear();
+      this._ustaw({ points: nowe }, true);
+      const po = this.querySelector('.osc-stan-zazn');
+      if (po) po.textContent = this._s.przypisano(ile);
+      else if (stanZ) stanZ.textContent = this._s.przypisano(ile);
+    });
 
     const btnAutomat = this.querySelector('.osc-btn-automat');
     if (btnAutomat) btnAutomat.addEventListener('click', () => this._utworzAutomatyzacje());
@@ -2365,6 +2589,8 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
     plotno.addEventListener('click', (ev) => {
       if (this._przeciagano) { this._przeciagano = false; return; }
       if (ev.target.closest('.osc-pkt')) return;
+      /* W trybie zaznaczania plotno sluzy do wybierania, a nie do dodawania. */
+      if (this._trybZaznaczania) return;
       const poz = wzgledne(ev);
       if (!poz) return;
       const { x, y } = poz;
@@ -2400,7 +2626,12 @@ class OgrodSwiatlaCardEditor extends HTMLElement {
           d.removeEventListener('pointerup', koniec);
           d.removeEventListener('pointercancel', koniec);
           if (!ruszono) {
-            this._wybrany = (this._wybrany === i) ? undefined : i;
+            if (this._trybZaznaczania) {
+              const z = this._zazn();
+              if (z.has(i)) z.delete(i); else z.add(i);
+            } else {
+              this._wybrany = (this._wybrany === i) ? undefined : i;
+            }
             this._render();
             return;
           }
